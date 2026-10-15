@@ -916,29 +916,87 @@ function stepVR(dt){
   rig.position.add(tpOff);
 }
 // ---------- VR menu: dedicated left-controller menu button ----------
-const MW=512,MH=472,menuCv=document.createElement('canvas');menuCv.width=MW;menuCv.height=MH;
+const MW=512,MH=500,menuCv=document.createElement('canvas');menuCv.width=MW;menuCv.height=MH;
 const menuCx=menuCv.getContext('2d'),menuTex=new THREE.CanvasTexture(menuCv);
 const menuG=new THREE.Group(),menuMesh=new THREE.Mesh(new THREE.PlaneGeometry(1,MH/MW),new THREE.MeshBasicMaterial({map:menuTex,transparent:true,fog:false,side:THREE.DoubleSide}));
 menuG.add(menuMesh);menuG.visible=false;scene.add(menuG);
 // Fixed stick transform: the tuning controls have been removed.
 const stickTune={x:-0.03,y:0.09,z:-0.04,rx:1.6,ry:1.9,rz:1.8,scale:0.01};
-const menuIds=['mic','hear','sfx','turn','mode','cam','close'];
-const MBTN=menuIds.map((id,i)=>({id,x:40,y:64+i*52,w:432,h:44}));
+const menuIds=['mic','hear','sfx','turn','mode','cam','cos','close'];
+const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:64+i*52,w:432,h:44}));
+// cosmetics page: hat thumbnails (5 per row), hat colors, fur colors, back button
+const COS_BTNS=[];
+hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%5)*92,y:84+Math.floor(i/5)*92,w:84,h:84}));
+COLS.forEach((c,i)=>COS_BTNS.push({id:'col:'+i,x:52+i*52,y:298,w:44,h:44}));
+FURS.forEach((v,i)=>COS_BTNS.push({id:'fur:'+i,x:25+i*36,y:378,w:30,h:30}));
+COS_BTNS.push({id:'back',x:40,y:424,w:432,h:44});
+let menuPage='main';const menuBtns=()=>menuPage==='cos'?COS_BTNS:MAIN_BTNS;
 let menuHover=-1,menuDrawKey='',menuOpen=false,mPrevReq=false,mArm=false;const mPrevTrig=[false,false];
-function rr(x,y,w,h,r){menuCx.beginPath();menuCx.moveTo(x+r,y);menuCx.arcTo(x+w,y,x+w,y+h,r);menuCx.arcTo(x,y+h,x,y,r);menuCx.arcTo(x,y,x+w,y,r);menuCx.closePath()}
+function rr(x,y,w,h,r){menuCx.beginPath();menuCx.moveTo(x+r,y);menuCx.arcTo(x+w,y,x+w,y+h,r);menuCx.arcTo(x+w,y+h,x,y+h,r);menuCx.arcTo(x,y+h,x,y,r);menuCx.arcTo(x,y,x+w,y,r);menuCx.closePath()}
 function applyStickTune(){
   if(!handCosmetic)return;
   handCosmetic.position.set(stickTune.x,stickTune.y,stickTune.z);
   handCosmetic.rotation.set(stickTune.rx,stickTune.ry,stickTune.rz);
   handCosmetic.scale.setScalar(stickTune.scale);
 }
+// little pictures of each hat for the cosmetics page (drawn once per hat+color by a tiny separate renderer)
+let _thR=null,_thScene=null,_thCam=null;const _thCache=new Map();
+function hatThumb(hi,ci){
+  const key=hi+'_'+ci;let c=_thCache.get(key);if(c)return c;
+  const S=128;c=document.createElement('canvas');c.width=c.height=S;_thCache.set(key,c);
+  const cx=c.getContext('2d');
+  if(!hatDefs[hi]||!hatDefs[hi][1]){cx.strokeStyle='#aaa';cx.lineWidth=10;cx.lineCap='round';cx.beginPath();cx.arc(64,64,32,0,Math.PI*2);cx.moveTo(41,87);cx.lineTo(87,41);cx.stroke();return c}
+  try{
+    if(!_thR){
+      _thR=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});_thR.setPixelRatio(1);_thR.setSize(S,S);_thR.setClearColor(0x000000,0);
+      _thScene=new THREE.Scene();_thScene.add(new THREE.AmbientLight(0xffffff,1.6));
+      const dl=new THREE.DirectionalLight(0xffffff,2.4);dl.position.set(1,2,2);_thScene.add(dl);
+      _thCam=new THREE.PerspectiveCamera(30,1,0.01,20);
+    }
+    const obj=hatDefs[hi][1](MT(COLS[ci]));_thScene.add(obj);
+    const bb=new THREE.Box3().setFromObject(obj),ctr=bb.getCenter(new THREE.Vector3()),sz=bb.getSize(new THREE.Vector3());
+    const r=Math.max(sz.x,sz.y,sz.z)*0.5,d=r/Math.tan(THREE.MathUtils.degToRad(15))*1.2;
+    _thCam.position.set(ctr.x,ctr.y+d*0.3,ctr.z+d);_thCam.lookAt(ctr);
+    _thR.render(_thScene,_thCam);cx.drawImage(_thR.domElement,0,0);
+    _thScene.remove(obj);obj.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose()});
+  }catch(e){console.warn('hat thumbnail failed',e);cx.fillStyle='#fff';cx.font='bold 20px sans-serif';cx.textAlign='center';cx.fillText(hatDefs[hi][0],64,70)}
+  return c;
+}
 function drawMenu(){
-  const key=menuHover+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost();
+  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost();
   if(key===menuDrawKey)return;menuDrawKey=key;
   const x=menuCx;x.clearRect(0,0,MW,MH);
   x.fillStyle='rgba(0,0,0,.88)';rr(0,0,MW,MH,28);x.fill();
-  x.fillStyle='#fff';x.font='bold 30px Utopium, sans-serif';x.textAlign='center';x.fillText('MENU',MW/2,43);
-  MBTN.forEach((b,i)=>{
+  x.fillStyle='#fff';x.font='bold 30px Utopium, sans-serif';x.textAlign='center';x.fillText(menuPage==='cos'?'COSMETICS':'MENU',MW/2,43);
+  if(menuPage==='cos'){
+    const hb=menuBtns()[menuHover],hovHat=hb&&hb.id.startsWith('hat:')?+hb.id.slice(4):cos.hat;
+    x.fillStyle='#ccc';x.font='bold 18px Utopium, sans-serif';x.textAlign='left';
+    x.fillText('Hat: '+hatDefs[hovHat][0],30,74);x.fillText('Hat color',30,290);x.fillText('Fur color',25,370);
+    x.textAlign='center';
+    menuBtns().forEach((b,i)=>{
+      const [k,n]=b.id.split(':'),idx=+n;let sel=false;
+      if(k==='hat'){
+        sel=idx===cos.hat;x.fillStyle='#2e2e2e';rr(b.x,b.y,b.w,b.h,12);x.fill();
+        x.drawImage(hatThumb(idx,cos.col),b.x+4,b.y+4,b.w-8,b.h-8);
+      }else if(k==='col'){
+        sel=idx===cos.col;x.fillStyle='#'+COLS[idx].toString(16).padStart(6,'0');rr(b.x,b.y,b.w,b.h,10);x.fill();
+      }else if(k==='fur'){
+        const v=FURS[idx];sel=v===cos.fur;
+        if(v<0){let g;if(x.createConicGradient){g=x.createConicGradient(0,b.x+b.w/2,b.y+b.h/2);['red','yellow','lime','cyan','blue','magenta','red'].forEach((c,j)=>g.addColorStop(j/6,c))}
+          else{g=x.createLinearGradient(b.x,b.y,b.x+b.w,b.y);['red','yellow','lime','cyan','blue','magenta'].forEach((c,j)=>g.addColorStop(j/5,c))}
+          x.fillStyle=g}
+        else x.fillStyle='#'+v.toString(16).padStart(6,'0');
+        rr(b.x,b.y,b.w,b.h,8);x.fill();
+      }else{ // back
+        x.fillStyle='#555';rr(b.x,b.y,b.w,b.h,12);x.fill();
+        x.fillStyle='#fff';x.font='bold 19px Utopium, sans-serif';x.fillText('< Back',b.x+b.w/2,b.y+b.h/2+6);
+      }
+      if(sel){x.strokeStyle='#ffd54a';x.lineWidth=5;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
+      if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
+    });
+    menuTex.needsUpdate=true;return;
+  }
+  MAIN_BTNS.forEach((b,i)=>{
     let col='#555',txt='Close menu',fg='#fff';
     if(b.id==='mic'){col=micOn?'#3ecf6a':'#d9534f';fg=micOn?'#000':'#fff';txt='Mic: '+(micOn?(micOK===false?'ON (no mic)':'ON'):'OFF')}
     else if(b.id==='hear'){col=hearOn?'#3ecf6a':'#d9534f';fg=hearOn?'#000':'#fff';txt='Hear others: '+(hearOn?'ON':'OFF')}
@@ -946,6 +1004,7 @@ function drawMenu(){
     else if(b.id==='turn'){col=turnMode?'#3b82f6':'#666';txt='Turning: '+TURN_NAMES[turnMode]}
     else if(b.id==='mode'){col=isHost()?'#b45309':'#444';txt='Game mode: '+(game.mode==='tag'?'TAG':'CASUAL')+(isHost()?'':' (host only)')}
     else if(b.id==='cam'){col='#8b5cf6';txt='Bring camera to me'}
+    else if(b.id==='cos'){col='#db2777';txt='Cosmetics  >'}
     x.fillStyle=col;rr(b.x,b.y,b.w,b.h,12);x.fill();
     if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
     x.fillStyle=fg;x.font='bold 19px Utopium, sans-serif';x.fillText(txt,b.x+b.w/2,b.y+b.h/2+6);
@@ -962,7 +1021,7 @@ function setMenu(on){
   _md.set(0,0,-1).applyQuaternion(_mq);_md.y=0;if(_md.lengthSq()<1e-4)_md.set(0,0,-1);_md.normalize();
   menuG.position.copy(_mo).addScaledVector(_md,1);menuG.position.y=_mo.y-0.05;
   menuG.lookAt(_mo.x,menuG.position.y,_mo.z);menuG.updateMatrixWorld(true);
-  menuHover=-1;menuDrawKey='';drawMenu();
+  menuPage='main';menuHover=-1;menuDrawKey='';drawMenu();
 }
 const pulse=gp=>{try{const a=gp&&gp.hapticActuators&&gp.hapticActuators[0];if(a&&a.pulse)a.pulse(0.4,40)}catch(e){}};
 function menuClick(id){
@@ -972,6 +1031,11 @@ function menuClick(id){
   else if(id==='turn'){turnMode=(turnMode+1)%3;vrSnap=false;try{localStorage.setItem('monkeTurn',turnMode)}catch(e){}}
   else if(id==='mode'){if(isHost())hostSetMode(game.mode==='tag'?'free':'tag')}
   else if(id==='cam'){camBring();setMenu(false)}
+  else if(id==='cos'){menuPage='cos';menuHover=-1;menuDrawKey=''}
+  else if(id==='back'){menuPage='main';menuHover=-1;menuDrawKey=''}
+  else if(id.startsWith('hat:')){cos.hat=+id.slice(4);wearHat()}
+  else if(id.startsWith('col:')){cos.col=+id.slice(4);wearHat()}
+  else if(id.startsWith('fur:')){cos.fur=FURS[+id.slice(4)];wearHat()}
   else if(id==='close')setMenu(false);
 }
 function vrMenuTick(dt){
@@ -995,8 +1059,8 @@ function vrMenuTick(dt){
       // Convert the real ray-hit point into menu-local coordinates. UV x can be mirrored on a DoubleSide back-face hit.
       const localHit=menuMesh.worldToLocal(h.point.clone());
       const px=(localHit.x+0.5)*MW,py=MH/2-localHit.y*MW;
-      const bi=MBTN.findIndex(b=>px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h);
-      if(bi>=0){hov=bi;if(press){pulse(gp);menuClick(MBTN[bi].id);if(!menuOpen)return}}
+      const BL=menuBtns(),bi=BL.findIndex(b=>px>=b.x&&px<=b.x+b.w&&py>=b.y&&py<=b.y+b.h);
+      if(bi>=0){hov=bi;if(press){pulse(gp);menuClick(BL[bi].id);if(!menuOpen)return}}
     }
     lasers[i].scale.z=len;
   }
