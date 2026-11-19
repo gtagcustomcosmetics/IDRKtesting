@@ -291,13 +291,16 @@ const _eu=new THREE.Euler();
 const _wfM=new THREE.Matrix4(),_wfD=new THREE.Matrix4(),_wfP=V(),_wfQ=new THREE.Quaternion(),_wfS=V(),_wfW=V(),_wfR=new THREE.Quaternion();
 function fixWrist(g,k,wq){
   const r=g.rig,wr=r.wrist[k],par=wr.parent;
-  wr.updateWorldMatrix(true,false);
+  par.updateWorldMatrix(true,false);
   if(!wq){par.getWorldQuaternion(_wfR);wq=_wfR.multiply(r.wq0[k])}
-  _wfW.setFromMatrixPosition(wr.matrixWorld);
+  _wfW.copy(wr.position).applyMatrix4(par.matrixWorld);
   _wfD.compose(_wfW,wq,_wfS.copy(r.ws[k]).multiplyScalar(g.group.scale.x));
-  _wfM.copy(par.matrixWorld).invert().multiply(_wfD).decompose(_wfP,_wfQ,_wfS);
-  wr.quaternion.copy(_wfQ);wr.scale.copy(_wfS);
+  // exact local matrix (a bone's position/rotation/scale can't hold the shear from the stretched parent, a raw matrix can)
+  _wfM.copy(par.matrixWorld).invert().multiply(_wfD);
+  wr.matrixAutoUpdate=false;wr.matrix.copy(_wfM);wr.matrixWorldNeedsUpdate=true;
+  _wfM.decompose(_wfP,_wfQ,_wfS);wr.quaternion.copy(_wfQ);wr.scale.copy(_wfS); // keep the TRS roughly in sync for the recorder
 }
+
 function aimAt(g,k,tp){
   const up=g.rig.upper[k];up.scale.set(1,1,1);g.group.updateMatrixWorld(true);
   up.getWorldPosition(_S);g.rig.wrist[k].getWorldPosition(_W);_C.subVectors(_W,_S).normalize();
@@ -899,7 +902,7 @@ function setHead(sc){P.g.rig.head.scale.setScalar(sc)} // new rig: head bone is 
 renderer.xr.addEventListener('sessionstart',()=>{rig.scale.setScalar(VS*SIZE);rig.position.set(P.pos.x,hgt(P.pos.x,P.pos.z)+0.5*SIZE,P.pos.z);
   P.vel.set(0,0,0);P.hist=[];P.g.group.scale.setScalar(SIZE);setHead(1);headS=1;tpOff.set(0,0,0);vrInit=true;$('help').style.display='none'});
 renderer.xr.addEventListener('sessionend',()=>{rig.scale.setScalar(1);rig.position.set(0,0,0);rig.rotation.set(0,0,0);
-  setHead(1);P.g.rig.head.quaternion.copy(_headBaseQ);tpOff.set(0,0,0);[0,1].forEach(k=>{P.g.rig.upper[k].scale.set(1,1,1);P.g.rig.wrist[k].scale.copy(P.g.rig.ws0[k])});reset();if(!locked)$('help').style.display='flex'});
+  setHead(1);P.g.rig.head.quaternion.copy(_headBaseQ);tpOff.set(0,0,0);[0,1].forEach(k=>{P.g.rig.upper[k].scale.set(1,1,1);P.g.rig.wrist[k].scale.copy(P.g.rig.ws0[k]);P.g.rig.wrist[k].matrixAutoUpdate=true});reset();if(!locked)$('help').style.display='flex'});
 const _hd=V();
 // Track headset pitch on the avatar's head bone without tilting the torso.
 const _headBaseQ=P.g.rig.head.quaternion.clone(),_headWorldQ=new THREE.Quaternion(),_rigWorldQ=new THREE.Quaternion(),_headLocalQ=new THREE.Quaternion(),_headPitchQ=new THREE.Quaternion(),_headPitchAxis=V(1,0,0);
