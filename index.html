@@ -229,7 +229,7 @@ function groundBelow(x,z,referenceY){
 // ---------- gorilla rig (arm bones aimed at a target direction) ----------
 function makeGorilla(){
   const group=new THREE.Group(),model=clone(playerGltf.scene);group.add(model);scene.add(group);
-  const rig={upper:[],lower:[],wrist:[],sh:[],len:[],lu:[],ll:[]};
+  const rig={upper:[],lower:[],wrist:[],sh:[],len:[],lu:[],ll:[],ws:[],ws0:[],wq0:[]};
   const meshes=[];
   // Playermodel.glb armature. Match normalized names so both spaces and
   // underscores from different GLTF exporters are accepted.
@@ -263,10 +263,15 @@ function makeGorilla(){
     $('help').style.display='flex';
     throw new Error('Unrecognized player rig. Missing: '+missing.join(', ')+'. Bones: '+names.join(', '));
   }
-  for(let k=0;k<2;k++){const s=rig.upper[k].getWorldPosition(V()),w=rig.wrist[k].getWorldPosition(V());rig.sh[k]=s;rig.len[k]=s.distanceTo(w);const l=rig.lower[k].getWorldPosition(V());rig.lu[k]=s.distanceTo(l);rig.ll[k]=l.distanceTo(w)}
-  let fm=meshes.filter(o=>FUR_MATCH.test(o.material.name));
+  for(let k=0;k<2;k++){const s=rig.upper[k].getWorldPosition(V()),w=rig.wrist[k].getWorldPosition(V());rig.sh[k]=s;rig.len[k]=s.distanceTo(w);const l=rig.lower[k].getWorldPosition(V());rig.lu[k]=s.distanceTo(l);rig.ll[k]=l.distanceTo(w);
+    // rest-pose hand data (world scale per unit of group scale, local scale, local rotation) so the hand can be kept un-stretched
+    const wr=rig.wrist[k];wr.updateWorldMatrix(true,false);const _a=V(),_b=new THREE.Quaternion(),_c=V();wr.matrixWorld.decompose(_a,_b,_c);
+    rig.ws[k]=_c.divideScalar(group.scale.x);rig.ws0[k]=wr.scale.clone();rig.wq0[k]=wr.quaternion.clone()}
+  // fur = the plain lime-green (untextured) materials; the chest/face/ears are textured or grey and must not be tinted
+  const isLime=m=>!m.map&&m.color.g>0.5&&m.color.r<0.25&&m.color.b<0.25;
+  let fm=meshes.filter(o=>FUR_MATCH.test(o.material.name)||isLime(o.material));
   if(!fm.length)fm=[meshes.reduce((a,b)=>b.geometry.attributes.position.count>a.geometry.attributes.position.count?b:a)];
-  return {group,model,rig,furMats:fm.map(o=>o.material),origMaps:fm.map(o=>o.material.map),fur:0xffffff,tg:false};
+  return {group,model,rig,furMats:fm.map(o=>o.material),origMaps:fm.map(o=>o.material.map),origCols:fm.map(o=>o.material.color.clone()),fur:0x30e636,tg:false};
 }
 const _S=V(),_W=V(),_C=V(),_D=V(),_q=new THREE.Quaternion(),_Qw=new THREE.Quaternion(),_Pq=new THREE.Quaternion();
 // arm direction in gorilla-local space: a = swing forward(+)/back(-), b = swing outward
@@ -281,6 +286,18 @@ function aim(g,k,a,b){
 }
 
 const _eu=new THREE.Euler();
+// The arm stretch is a non-uniform scale on the upper-arm bone, and the wrist/hand inherits it (squashed/skewed hand, twisted wrist).
+// Solve the wrist's local rotation + scale so its WORLD transform is the controller rotation at its normal size, whatever the arm above does.
+const _wfM=new THREE.Matrix4(),_wfD=new THREE.Matrix4(),_wfP=V(),_wfQ=new THREE.Quaternion(),_wfS=V(),_wfW=V(),_wfR=new THREE.Quaternion();
+function fixWrist(g,k,wq){
+  const r=g.rig,wr=r.wrist[k],par=wr.parent;
+  wr.updateWorldMatrix(true,false);
+  if(!wq){par.getWorldQuaternion(_wfR);wq=_wfR.multiply(r.wq0[k])}
+  _wfW.setFromMatrixPosition(wr.matrixWorld);
+  _wfD.compose(_wfW,wq,_wfS.copy(r.ws[k]).multiplyScalar(g.group.scale.x));
+  _wfM.copy(par.matrixWorld).invert().multiply(_wfD).decompose(_wfP,_wfQ,_wfS);
+  wr.quaternion.copy(_wfQ);wr.scale.copy(_wfS);
+}
 function aimAt(g,k,tp){
   const up=g.rig.upper[k];up.scale.set(1,1,1);g.group.updateMatrixWorld(true);
   up.getWorldPosition(_S);g.rig.wrist[k].getWorldPosition(_W);_C.subVectors(_W,_S).normalize();
@@ -306,6 +323,7 @@ function ik(g,k,T,pole){
   _ep.copy(pole).addScaledVector(_u,-pole.dot(_u));if(_ep.lengthSq()<1e-6)_ep.set(0,-1,0);_ep.normalize();
   const E=S.clone().addScaledVector(_u,x).addScaledVector(_ep,hh);
   U.scale.set(1,f,1);aimBone(U,r.lower[k],E);aimBone(r.lower[k],r.wrist[k],T);
+  fixWrist(g,k);
 }
 // hand/wrist rotation follows the controller (tune HAND_TILT / HAND_ROLL if the hands look rotated wrong)
 const HAND_TILT=-0.5,HAND_ROLL=0;
@@ -313,7 +331,7 @@ const qAl=new THREE.Quaternion().setFromUnitVectors(V(0,1,0),V(0,0,-1)),qTl=new 
 function handRot(g,k,cq){
   const wr=g.rig.wrist[k];
   _wq.copy(cq).multiply(qTl).multiply(qAl).multiply(_roll.setFromAxisAngle(V(0,1,0),k?-HAND_ROLL:HAND_ROLL));
-  wr.parent.getWorldQuaternion(_Pq);wr.quaternion.copy(_Pq.invert().multiply(_wq));
+  fixWrist(g,k,_wq);
 }
 // ---------- player ----------
 const P={g:makeGorilla(),pos:V(),vel:V(),yaw:0,pitch:0,a:[0,0],b:[.15,.15],prev:[V(),V()],touch:[false,false],ht:[false,false],htT:[0,0],hist:[],third:false,was:false};
@@ -385,11 +403,14 @@ function setHat(g,hi,ci){
   if(g.hatObj){g.rig.head.remove(g.hatObj);g.hatObj=null;g.spin=null}
   if(hatDefs[hi]&&hatDefs[hi][1]){g.hatObj=hatDefs[hi][1](MT(COLS[ci]));g.spin=g.hatObj.userData.spin||null;at(g.hatObj,0,0.285,0.03);g.rig.head.add(g.hatObj)}
 }
-function setFur(g,v){g.fur=v;if(v>=0&&!g.tg)g.furMats.forEach(m=>m.color.setHex(v))}
+// FUR_ORIG (the default swatch) = the model's own lime green; any other swatch (white included) replaces it
+const FUR_ORIG=0x30e636;
+function furCol(g,i,v){if(v===FUR_ORIG)g.furMats[i].color.copy(g.origCols[i]);else g.furMats[i].color.setHex(v)}
+function setFur(g,v){g.fur=v;if(v>=0&&!g.tg)g.furMats.forEach((m,i)=>furCol(g,i,v))}
 function rainbow(g,t){g.furMats.forEach(m=>m.color.setHSL((t*0.12)%1,0.85,0.55))}
 function furTick(t){if(P.g.fur===-1&&!P.g.tg)rainbow(P.g,t);remotes.forEach(r=>{if(r.g.fur===-1&&!r.g.tg)rainbow(r.g,t)})}
-const cos={hat:0,col:0,fur:0xffffff};let net=null;
-try{const sv=JSON.parse(localStorage.getItem('monkeCos')||'{}');if(sv.hat>=0&&sv.hat<hatDefs.length)cos.hat=sv.hat|0;if(sv.col>=0&&sv.col<COLS.length)cos.col=sv.col|0;if(typeof sv.fur==='number')cos.fur=sv.fur}catch(e){}
+const cos={hat:0,col:0,fur:FUR_ORIG};let net=null;
+try{const sv=JSON.parse(localStorage.getItem('monkeCos')||'{}');if(sv.hat>=0&&sv.hat<hatDefs.length)cos.hat=sv.hat|0;if(sv.col>=0&&sv.col<COLS.length)cos.col=sv.col|0;if(typeof sv.fur==='number')cos.fur=(sv.fur===0xffffff&&!sv.fv2)?FUR_ORIG:sv.fur;cos.fv2=1}catch(e){}
 const cosEl=document.createElement('div');cosEl.id='cos';
 cosEl.innerHTML='<b>Wardrobe</b><div id="hl"></div><div id="cl"></div><b>Fur color</b><div id="fl"></div><small>In game: <b>H</b> hat, <b>C</b> hat color, <b>F</b> fur color.<br>Check yourself in the mirror!<br>Click outside this box to play.</small>';
 $('help').appendChild(cosEl);['click','mousedown'].forEach(ev=>cosEl.addEventListener(ev,e=>e.stopPropagation()));
@@ -400,8 +421,8 @@ secretCosmeticRow.appendChild(secretCosmeticBtn);$('hl').parentNode.insertBefore
 function refreshHandCosmeticButton(){if(!secretCosmeticBtn)return;const allowed=myName().trim().toUpperCase()===HAND_COSMETIC_USERNAME;secretCosmeticRow.style.display=allowed?'block':'none';secretCosmeticBtn.disabled=!handCosmeticSource;secretCosmeticBtn.textContent=handCosmeticEquipped?'Unequip Secret Stick':'Equip Secret Stick';secretCosmeticBtn.title=handCosmeticSource?'LOKE-only cosmetic':'Loading stick.fbx...'}
 hatDefs.forEach((h,i)=>{const b=document.createElement('button');b.textContent=h[0];b.onclick=()=>{cos.hat=i;wearHat()};$('hl').appendChild(b)});
 COLS.forEach((c,i)=>{const d=document.createElement('span');d.className='sw';d.style.background='#'+c.toString(16).padStart(6,'0');d.onclick=()=>{cos.col=i;wearHat()};$('cl').appendChild(d)});
-const FURS=[0xffffff,0xe8742a,0xd62f2f,0xff7eb6,0x9b59b6,0x3b7ddd,0x25c4e8,0x2ecc71,0xb6e63a,0xf6d32d,0x8a5a2b,0x2b2b2b,-1];
-FURS.forEach(v=>{const d=document.createElement('span');d.className='sw';d.dataset.v=v;d.title=v===0xffffff?'Original':v<0?'Rainbow':'';
+const FURS=[FUR_ORIG,0xffffff,0xe8742a,0xd62f2f,0xff7eb6,0x9b59b6,0x3b7ddd,0x25c4e8,0x2ecc71,0xb6e63a,0xf6d32d,0x8a5a2b,0x2b2b2b,-1];
+FURS.forEach(v=>{const d=document.createElement('span');d.className='sw';d.dataset.v=v;d.title=v===FUR_ORIG?'Original':v===0xffffff?'White':v<0?'Rainbow':'';
   d.style.background=v<0?'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)':'#'+v.toString(16).padStart(6,'0');d.onclick=()=>{cos.fur=v;wearHat()};$('fl').appendChild(d)});
 const fp=document.createElement('input');fp.type='color';fp.value='#ff8800';fp.title='Custom fur color';fp.style.cssText='width:30px;height:26px;border:0;padding:0;vertical-align:middle;background:none';
 fp.oninput=()=>{cos.fur=parseInt(fp.value.slice(1),16);wearHat()};$('fl').appendChild(fp);
@@ -749,7 +770,7 @@ function setTaggedLook(g,on){
   g.tg=on;
   g.furMats.forEach((m,i)=>{
     if(on){if(taggedTex){m.map=taggedTex;m.color.set(0xffffff)}else m.color.set(0xff2d2d)}
-    else{m.map=g.origMaps[i];if(g.fur>=0)m.color.setHex(g.fur);else m.color.set(0xffffff)}
+    else{m.map=g.origMaps[i];if(g.fur>=0)furCol(g,i,g.fur);else m.color.copy(g.origCols[i])}
     m.needsUpdate=true;
   });
 }
@@ -878,7 +899,7 @@ function setHead(sc){P.g.rig.head.scale.setScalar(sc)} // new rig: head bone is 
 renderer.xr.addEventListener('sessionstart',()=>{rig.scale.setScalar(VS*SIZE);rig.position.set(P.pos.x,hgt(P.pos.x,P.pos.z)+0.5*SIZE,P.pos.z);
   P.vel.set(0,0,0);P.hist=[];P.g.group.scale.setScalar(SIZE);setHead(1);headS=1;tpOff.set(0,0,0);vrInit=true;$('help').style.display='none'});
 renderer.xr.addEventListener('sessionend',()=>{rig.scale.setScalar(1);rig.position.set(0,0,0);rig.rotation.set(0,0,0);
-  setHead(1);P.g.rig.head.quaternion.copy(_headBaseQ);tpOff.set(0,0,0);[0,1].forEach(k=>P.g.rig.upper[k].scale.set(1,1,1));reset();if(!locked)$('help').style.display='flex'});
+  setHead(1);P.g.rig.head.quaternion.copy(_headBaseQ);tpOff.set(0,0,0);[0,1].forEach(k=>{P.g.rig.upper[k].scale.set(1,1,1);P.g.rig.wrist[k].scale.copy(P.g.rig.ws0[k])});reset();if(!locked)$('help').style.display='flex'});
 const _hd=V();
 // Track headset pitch on the avatar's head bone without tilting the torso.
 const _headBaseQ=P.g.rig.head.quaternion.clone(),_headWorldQ=new THREE.Quaternion(),_rigWorldQ=new THREE.Quaternion(),_headLocalQ=new THREE.Quaternion(),_headPitchQ=new THREE.Quaternion(),_headPitchAxis=V(1,0,0);
@@ -1077,7 +1098,7 @@ const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:64+i*52,w:432,h:44}));
 const COS_BTNS=[];
 hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%5)*92,y:84+Math.floor(i/5)*92,w:84,h:84}));
 COLS.forEach((c,i)=>COS_BTNS.push({id:'col:'+i,x:52+i*52,y:298,w:44,h:44}));
-FURS.forEach((v,i)=>COS_BTNS.push({id:'fur:'+i,x:25+i*36,y:378,w:30,h:30}));
+FURS.forEach((v,i)=>COS_BTNS.push({id:'fur:'+i,x:25+i*34,y:378,w:30,h:30}));
 COS_BTNS.push({id:'name',x:40,y:424,w:432,h:44},{id:'stick',x:40,y:476,w:432,h:44},{id:'back',x:40,y:528,w:432,h:44});
 const MOCAP_BTNS=[{id:'mc_rec',x:40,y:84,w:432,h:56},{id:'mc_exp',x:40,y:148,w:432,h:56},{id:'mc_clr',x:40,y:212,w:432,h:56},{id:'mc_map',x:40,y:276,w:432,h:56},{id:'mc_pl',x:40,y:340,w:432,h:56},{id:'back',x:40,y:408,w:432,h:44}];
 const stickAllowed=()=>myName().trim().toUpperCase()===HAND_COSMETIC_USERNAME; // Secret Stick button only exists for LOKE
