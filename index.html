@@ -235,16 +235,16 @@ function makeGorilla(){
   // underscores from different GLTF exporters are accepted.
   // Index 0 = left arm (+X side), index 1 = right arm (-X side).
   const boneKey=name=>String(name||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-  const BONES={upper:['upperarml12','upperarmr6'],lower:['lowerarml11','lowerarmr5'],wrist:['wristl10','wristr4'],head:'head0'};
+  const BONES={upper:[['upperarml12','n19'],['upperarmr6','n32']],lower:[['lowerarml11','n20'],['lowerarmr5','n33']],wrist:[['wristl10','n21'],['wristr4','n34']],head:['head0','n44']};
   model.traverse(o=>{
     if(o.isMesh||o.isSkinnedMesh){o.frustumCulled=false;o.material=o.material.clone();meshes.push(o)}
     const name=boneKey(o.name);
     for(let k=0;k<2;k++){
-      if(name===BONES.upper[k])rig.upper[k]=o;
-      if(name===BONES.lower[k])rig.lower[k]=o;
-      if(name===BONES.wrist[k])rig.wrist[k]=o;
+      if(BONES.upper[k].includes(name))rig.upper[k]=o;
+      if(BONES.lower[k].includes(name))rig.lower[k]=o;
+      if(BONES.wrist[k].includes(name))rig.wrist[k]=o;
     }
-    if(name===BONES.head)rig.head=o;
+    if(BONES.head.includes(name))rig.head=o;
   });
   group.updateMatrixWorld(true);
   const missing=[];
