@@ -224,10 +224,11 @@ function groundBelow(x,z,referenceY){
 }
 
 // ---------- mirror (stands in front of the spawn point, facing it) ----------
+let selfMirror=null;
 {
   const mx=0,mz=-3.5,base=Math.min(hgt(mx-1.5,mz),hgt(mx,mz),hgt(mx+1.5,mz));
   const mir=new Reflector(new THREE.PlaneGeometry(3,2.2),{clipBias:0.003,textureWidth:1024,textureHeight:768,color:0xdddddd});
-  mir.position.set(mx,base+1.4,mz);scene.add(mir);
+  mir.position.set(mx,base+1.4,mz);scene.add(mir);selfMirror=mir;
   const fr=new THREE.Mesh(new THREE.BoxGeometry(3.3,2.9,0.12),new THREE.MeshStandardMaterial({color:0x5a3a1e,roughness:0.8}));
   fr.position.set(mx,base+1.15,mz-0.07);scene.add(fr);
 }
@@ -1600,6 +1601,30 @@ camTick=function(dt){
 };
 }
 
+// ---------- hide YOUR OWN head + hat from YOUR camera ----------
+// The head is part of the body mesh, so it can't go on a camera layer. Instead the head bone is shrunk to almost nothing
+// only while your own first-person view is drawn (the hat is a child of the head bone, so it vanishes too). Other players,
+// third person and the mirror still show the head and hat, and the real bone scale is restored right after drawing.
+let selfHeadHidden=false;const _selfHS=V();
+function setSelfHead(hide){
+  if(hide===selfHeadHidden)return;
+  selfHeadHidden=hide;
+  const h=P.g.rig.head;
+  if(hide){_selfHS.copy(h.scale);h.scale.multiplyScalar(0.0001)}else h.scale.copy(_selfHS);
+  h.updateMatrixWorld(true);
+  const seen=new Set();
+  P.g.group.traverse(o=>{if(o.isSkinnedMesh&&o.skeleton&&!seen.has(o.skeleton)){seen.add(o.skeleton);o.skeleton.update()}});
+}
+if(selfMirror){ // the mirror draws its own pass inside renderer.render: show the head for that pass, then hide it again
+  const origMirror=selfMirror.onBeforeRender;
+  selfMirror.onBeforeRender=function(...a){
+    const was=selfHeadHidden;
+    if(was)setSelfHead(false);
+    origMirror.apply(this,a);
+    if(was)setSelfHead(true);
+  };
+}
+
 const clock=new THREE.Clock();let t=0;
 renderer.setAnimationLoop(()=>{
   const dt=Math.min(clock.getDelta(),1/30);t+=dt;
@@ -1611,6 +1636,6 @@ renderer.setAnimationLoop(()=>{
   else if(P.third){cam.position.copy(P.pos).addScaledVector(f,-3.2*SIZE).add(V(0,1.4*SIZE,0));cam.lookAt(P.pos)}
   else{cam.position.copy(P.g.group.localToWorld(V(0,0.5,0.28)));cam.rotation.set(P.pitch,P.yaw,0,'YXZ')}
   $('sub').textContent=`Speed: ${P.vel.length().toFixed(1)} m/s`;
-  renderer.render(scene,cam);
+  setSelfHead(!P.third);renderer.render(scene,cam);setSelfHead(false);
 });
 </script></body></html>
