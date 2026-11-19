@@ -234,7 +234,7 @@ function groundBelow(x,z,referenceY){
 // ---------- gorilla rig (arm bones aimed at a target direction) ----------
 function makeGorilla(){
   const group=new THREE.Group(),model=clone(playerGltf.scene);group.add(model);scene.add(group);
-  const rig={upper:[],lower:[],wrist:[],sh:[],len:[],lu:[],ll:[],ws:[],ws0:[],wq0:[]};
+  const rig={upper:[],lower:[],wrist:[],sh:[],len:[],lu:[],ll:[],ws:[],ws0:[],wq0:[],uq0:[],lq0:[]};
   const meshes=[];
   // Playermodel.glb armature. Match normalized names so both spaces and
   // underscores from different GLTF exporters are accepted.
@@ -271,7 +271,7 @@ function makeGorilla(){
   for(let k=0;k<2;k++){const s=rig.upper[k].getWorldPosition(V()),w=rig.wrist[k].getWorldPosition(V());rig.sh[k]=s;rig.len[k]=s.distanceTo(w);const l=rig.lower[k].getWorldPosition(V());rig.lu[k]=s.distanceTo(l);rig.ll[k]=l.distanceTo(w);
     // rest-pose hand data (world scale per unit of group scale, local scale, local rotation) so the hand can be kept un-stretched
     const wr=rig.wrist[k];wr.updateWorldMatrix(true,false);const _a=V(),_b=new THREE.Quaternion(),_c=V();wr.matrixWorld.decompose(_a,_b,_c);
-    rig.ws[k]=_c.divideScalar(group.scale.x);rig.ws0[k]=wr.scale.clone();rig.wq0[k]=wr.quaternion.clone()}
+    rig.ws[k]=_c.divideScalar(group.scale.x);rig.ws0[k]=wr.scale.clone();rig.wq0[k]=wr.quaternion.clone();rig.uq0[k]=rig.upper[k].quaternion.clone();rig.lq0[k]=rig.lower[k].quaternion.clone()}
   // Hand vertices are partly skinned to the forearm bone. The arm stretch scales the upper arm (the forearm inherits it), which dragged the palm/fingers into long spikes.
   // Re-skin everything from the wrist outwards to the wrist bone alone (that bone is kept at normal size by fixWrist); the arm itself still stretches as far as before.
   meshes.forEach(o=>{
@@ -348,7 +348,10 @@ function aimBone(b,c,tp){
 }
 const MAX_STRETCH=3; // how far an arm may stretch to keep the visible hand on the controller (was 1.7: past that the hand floated short of where it was touching)
 function ik(g,k,T,pole){
-  const r=g.rig,U=r.upper[k];U.scale.set(1,1,1);g.group.updateMatrixWorld(true);
+  const r=g.rig,U=r.upper[k];U.scale.set(1,1,1);
+  // Start from the rest rotations every frame. The bones used to keep last frame's rotation and each shortest-arc aim was applied on top of it, so the roll slowly accumulated
+  // and the arms twisted up like noodles; now the roll depends only on where the hand is.
+  U.quaternion.copy(r.uq0[k]);r.lower[k].quaternion.copy(r.lq0[k]);g.group.updateMatrixWorld(true);
   const gs=g.group.scale.x,S=U.getWorldPosition(V()),d=S.distanceTo(T),f=Math.min(MAX_STRETCH,Math.max(1,d/((r.lu[k]+r.ll[k])*gs))),a=r.lu[k]*gs*f,b=r.ll[k]*gs*f;
   const dd=Math.min(Math.max(d,Math.abs(a-b)+1e-3),a+b-1e-3);
   _u.subVectors(T,S).normalize();
