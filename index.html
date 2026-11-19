@@ -231,17 +231,20 @@ function makeGorilla(){
   const group=new THREE.Group(),model=clone(playerGltf.scene);group.add(model);scene.add(group);
   const rig={upper:[],lower:[],wrist:[],sh:[],len:[],lu:[],ll:[]};
   const meshes=[];
-  // New Playermodel.glb rig (Gorilla_IK_Rig): bones are named n17..n44.
+  // Playermodel.glb armature. Match normalized names so both spaces and
+  // underscores from different GLTF exporters are accepted.
   // Index 0 = left arm (+X side), index 1 = right arm (-X side).
-  const BONES={upper:['n19','n32'],lower:['n20','n33'],wrist:['n21','n34'],head:'n44'};
+  const boneKey=name=>String(name||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const BONES={upper:['upperarml12','upperarmr6'],lower:['lowerarml11','lowerarmr5'],wrist:['wristl10','wristr4'],head:'head0'};
   model.traverse(o=>{
     if(o.isMesh||o.isSkinnedMesh){o.frustumCulled=false;o.material=o.material.clone();meshes.push(o)}
+    const name=boneKey(o.name);
     for(let k=0;k<2;k++){
-      if(o.name===BONES.upper[k])rig.upper[k]=o;
-      if(o.name===BONES.lower[k])rig.lower[k]=o;
-      if(o.name===BONES.wrist[k])rig.wrist[k]=o;
+      if(name===BONES.upper[k])rig.upper[k]=o;
+      if(name===BONES.lower[k])rig.lower[k]=o;
+      if(name===BONES.wrist[k])rig.wrist[k]=o;
     }
-    if(o.name===BONES.head)rig.head=o;
+    if(name===BONES.head)rig.head=o;
   });
   group.updateMatrixWorld(true);
   const missing=[];
