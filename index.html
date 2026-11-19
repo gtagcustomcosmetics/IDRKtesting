@@ -272,6 +272,30 @@ function makeGorilla(){
     // rest-pose hand data (world scale per unit of group scale, local scale, local rotation) so the hand can be kept un-stretched
     const wr=rig.wrist[k];wr.updateWorldMatrix(true,false);const _a=V(),_b=new THREE.Quaternion(),_c=V();wr.matrixWorld.decompose(_a,_b,_c);
     rig.ws[k]=_c.divideScalar(group.scale.x);rig.ws0[k]=wr.scale.clone();rig.wq0[k]=wr.quaternion.clone()}
+  // Hand vertices are partly skinned to the forearm bone. The arm stretch scales the upper arm (the forearm inherits it), which dragged the palm/fingers into long spikes.
+  // Re-skin everything from the wrist outwards to the wrist bone alone (that bone is kept at normal size by fixWrist); the arm itself still stretches as far as before.
+  meshes.forEach(o=>{
+    if(!o.isSkinnedMesh||!o.skeleton||o.geometry.userData.handSkinFixed)return;
+    const geo=o.geometry,si=geo.attributes.skinIndex,sw=geo.attributes.skinWeight,pos=geo.attributes.position;if(!si||!sw||!pos)return;
+    let changed=false;
+    for(let k=0;k<2;k++){
+      const li=o.skeleton.bones.indexOf(rig.lower[k]),wi=o.skeleton.bones.indexOf(rig.wrist[k]);if(li<0||wi<0)continue;
+      const lp=o.worldToLocal(rig.lower[k].getWorldPosition(V())),wp=o.worldToLocal(rig.wrist[k].getWorldPosition(V())),d=wp.clone().sub(lp).normalize();
+      for(let v=0;v<pos.count;v++){
+        if((pos.getX(v)-wp.x)*d.x+(pos.getY(v)-wp.y)*d.y+(pos.getZ(v)-wp.z)*d.z<-0.01)continue; // still on the forearm side of the wrist
+        const ix=[si.getX(v),si.getY(v),si.getZ(v),si.getW(v)],wt=[sw.getX(v),sw.getY(v),sw.getZ(v),sw.getW(v)];
+        let lw=0;for(let c=0;c<4;c++)if(ix[c]===li&&wt[c]>0){lw+=wt[c];wt[c]=0}
+        if(lw===0)continue;
+        let ws=ix.findIndex((q,c)=>q===wi&&wt[c]>0);
+        if(ws<0)ws=wt.findIndex(x=>x===0); // reuse the freed slot
+        if(ws<0)continue;
+        ix[ws]=wi;wt[ws]+=lw;
+        si.setXYZW(v,ix[0],ix[1],ix[2],ix[3]);sw.setXYZW(v,wt[0],wt[1],wt[2],wt[3]);changed=true;
+      }
+    }
+    if(changed){si.needsUpdate=true;sw.needsUpdate=true}
+    geo.userData.handSkinFixed=true;
+  });
   // fur = the plain lime-green (untextured) materials; the chest/face/ears are textured or grey and must not be tinted
   const isLime=m=>!m.map&&m.color.g>0.5&&m.color.r<0.25&&m.color.b<0.25;
   let fm=meshes.filter(o=>FUR_MATCH.test(o.material.name)||isLime(o.material));
@@ -1587,4 +1611,3 @@ renderer.setAnimationLoop(()=>{
   renderer.render(scene,cam);
 });
 </script></body></html>
-
