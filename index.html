@@ -1606,7 +1606,7 @@ camTick=function(dt){
 // only while your own first-person view is drawn (the hat is a child of the head bone, so it vanishes too). Other players,
 // third person and the mirror still show the head and hat, and the real bone scale is restored right after drawing.
 // First-person camera sits at your head bone (it used to sit ~0.3 in FRONT of the head). EYE_OFF nudges it from the bone: x right/left, y up, z forward (body space). Tune these.
-const EYE_OFF=V(0,0.1,0.12),_eyeP=V(),_eyeV=V();
+const EYE_OFF=V(0,0.17,0.14),_eyeP=V(),_eyeV=V();
 let selfHeadHidden=false;const _selfHS=V();
 function setSelfHead(hide){
   if(hide===selfHeadHidden)return;
