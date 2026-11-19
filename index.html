@@ -44,6 +44,9 @@ import {VRButton} from 'three/addons/webxr/VRButton.js';
 const $=id=>document.getElementById(id), V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const R=0.55, RH=0.1, GRAV=9.8, MAXV=12, SENS=0.005, LOOK=0.0025, PI=Math.PI;
 const SIZE=1; // (size changer removed)
+// The player model's body hangs only ~0.05 below its origin, but the collision sphere (radius R) is centered on that origin, so the body used to rest ~0.5 above the ground.
+// BODY_LIFT moves the collision sphere up relative to the model so the body rests just above the ground (the head/camera stay where they were relative to the model).
+const BODY_LIFT=0.4;
 const FUR_MATCH=/GorillaTagColor/i; // fur material in the new Playermodel.glb (if no material matches, the biggest mesh is tinted)
 const renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);
@@ -157,7 +160,9 @@ const MAX_SUBSTEPS=40;
 function moveBodyAt(pos,dx,dy,dz,Rs,contacts){
   const len=Math.sqrt(dx*dx+dy*dy+dz*dz),n=Math.min(MAX_SUBSTEPS,Math.max(1,Math.ceil(len/(0.33*Rs))));
   const sx=dx/n,sy=dy/n,sz=dz/n;
+  const lift=BODY_LIFT*(Rs/R);pos.y+=lift; // collide with the sphere above the model origin
   for(let i=0;i<n;i++){pos.x+=sx;pos.y+=sy;pos.z+=sz;MapCol.pushOut(pos,Rs,contacts)}
+  pos.y-=lift;
 }
 // remove the part of the velocity that points into the surfaces we touched; tells the caller about the ground
 function bodyResponse(vel,contacts){
@@ -317,9 +322,10 @@ function aimBone(b,c,tp){
   _q.setFromUnitVectors(_C,_D);b.getWorldQuaternion(_Qw);b.parent.getWorldQuaternion(_Pq);
   b.quaternion.copy(_Pq.invert().multiply(_q.multiply(_Qw)));
 }
+const MAX_STRETCH=3; // how far an arm may stretch to keep the visible hand on the controller (was 1.7: past that the hand floated short of where it was touching)
 function ik(g,k,T,pole){
   const r=g.rig,U=r.upper[k];U.scale.set(1,1,1);g.group.updateMatrixWorld(true);
-  const gs=g.group.scale.x,S=U.getWorldPosition(V()),d=S.distanceTo(T),f=Math.min(1.7,Math.max(1,d/((r.lu[k]+r.ll[k])*gs))),a=r.lu[k]*gs*f,b=r.ll[k]*gs*f;
+  const gs=g.group.scale.x,S=U.getWorldPosition(V()),d=S.distanceTo(T),f=Math.min(MAX_STRETCH,Math.max(1,d/((r.lu[k]+r.ll[k])*gs))),a=r.lu[k]*gs*f,b=r.ll[k]*gs*f;
   const dd=Math.min(Math.max(d,Math.abs(a-b)+1e-3),a+b-1e-3);
   _u.subVectors(T,S).normalize();
   const x=(a*a-b*b+dd*dd)/(2*dd),hh=Math.sqrt(Math.max(0,a*a-x*x));
@@ -338,7 +344,7 @@ function handRot(g,k,cq){
 }
 // ---------- player ----------
 const P={g:makeGorilla(),pos:V(),vel:V(),yaw:0,pitch:0,a:[0,0],b:[.15,.15],prev:[V(),V()],touch:[false,false],ht:[false,false],htT:[0,0],hist:[],third:false,was:false};
-function reset(){P.pos.set(0,0,0);P.pos.y=hgt(0,0)+(R+0.2)*SIZE;P.vel.set(0,0,0);P.hist=[];
+function reset(){P.pos.set(0,0,0);P.pos.y=hgt(0,0)+(R-BODY_LIFT+0.2)*SIZE;P.vel.set(0,0,0);P.hist=[];
   for(let k=0;k<2;k++)armOffset(P.g,k,P.a[k],P.b[k],P.prev[k])}
 reset();
 
@@ -923,7 +929,7 @@ function stepVR(dt){
       head();const H=_hd.clone();rig.rotation.y+=tn;rig.position.sub(H).applyAxisAngle(_Y,tn).add(H);rig.updateMatrixWorld(true);
       for(let k=0;k<2;k++)if(vrPrev[k])vrPrev[k].applyAxisAngle(_Y,tn)}}
   head();const pb=_hd.clone();pb.y-=0.5*SIZE;
-  if(vrInit){rig.position.y+=hgt(pb.x,pb.z)+Rs-pb.y;vrInit=false;rig.updateMatrixWorld(true);head();pb.copy(_hd);pb.y-=0.5*SIZE}
+  if(vrInit){rig.position.y+=hgt(pb.x,pb.z)+Rs-BODY_LIFT*SIZE-pb.y;vrInit=false;rig.updateMatrixWorld(true);head();pb.copy(_hd);pb.y-=0.5*SIZE}
   const hp=_hd.clone(),disp=V(),w=[null,null];let touching=false;
   for(let k=0;k<2;k++){
     P.touch[k]=false;const bh=byHand[k];if(!bh){vrPrev[k]=null;continue}
@@ -1581,3 +1587,4 @@ renderer.setAnimationLoop(()=>{
   renderer.render(scene,cam);
 });
 </script></body></html>
+
