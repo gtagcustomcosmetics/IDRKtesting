@@ -54,7 +54,8 @@ document.body.prepend(renderer.domElement);
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x9fd3f5);scene.fog=new THREE.Fog(0x9fd3f5,70,230);
 scene.add(new THREE.HemisphereLight(0xffffff,0x6a8a4a,1.2));
 const sun=new THREE.DirectionalLight(0xffffff,2.2);sun.position.set(50,100,30);scene.add(sun);
-const cam=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.01,500);
+const XR_DEPTH_NEAR=0.005; // 5 mm: let hands get very close to the headset camera before the VR view clips them
+const cam=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,XR_DEPTH_NEAR,500);
 const rig=new THREE.Group();scene.add(rig);rig.add(cam);
 renderer.xr.enabled=true;document.body.appendChild(VRButton.createButton(renderer));
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()});
@@ -933,7 +934,12 @@ function setHead(sc){P.g.rig.head.scale.setScalar(sc)} // new rig: head bone is 
 [0,1].forEach(i=>{const c=renderer.xr.getController(i);rig.add(c);
   c.addEventListener('connected',e=>{const hd=e.data.handedness==='left'?0:1;byHand[hd]={grip:grips[i],gp:e.data.gamepad};vrPrev[hd]=null});
   c.addEventListener('disconnected',()=>{for(let k=0;k<2;k++)if(byHand[k]&&byHand[k].grip===grips[i]){byHand[k]=null;vrPrev[k]=null}})});
-renderer.xr.addEventListener('sessionstart',()=>{rig.scale.setScalar(VS*SIZE);rig.position.set(P.pos.x,hgt(P.pos.x,P.pos.z)+0.5*SIZE,P.pos.z);
+renderer.xr.addEventListener('sessionstart',()=>{
+  // The WebXR headset cameras use the XR session render state, not just cam.near.
+  // Lower depthNear here so controller-held hands remain visible close to the user's face.
+  const xrSession=renderer.xr.getSession();
+  if(xrSession){try{xrSession.updateRenderState({depthNear:XR_DEPTH_NEAR})}catch(e){console.warn('Could not update WebXR near clipping distance:',e)}}
+  rig.scale.setScalar(VS*SIZE);rig.position.set(P.pos.x,hgt(P.pos.x,P.pos.z)+0.5*SIZE,P.pos.z);
   P.vel.set(0,0,0);P.hist=[];P.g.group.scale.setScalar(SIZE);setHead(1);headS=1;tpOff.set(0,0,0);vrInit=true;$('help').style.display='none'});
 renderer.xr.addEventListener('sessionend',()=>{rig.scale.setScalar(1);rig.position.set(0,0,0);rig.rotation.set(0,0,0);
   setHead(1);P.g.rig.head.quaternion.copy(_headBaseQ);tpOff.set(0,0,0);[0,1].forEach(k=>{P.g.rig.upper[k].scale.set(1,1,1);P.g.rig.wrist[k].scale.copy(P.g.rig.ws0[k]);P.g.rig.wrist[k].matrixAutoUpdate=true});reset();if(!locked)$('help').style.display='flex'});
@@ -1506,7 +1512,7 @@ function placeCam(){
 camBring=()=>{rig.updateMatrixWorld(true);headPose();placeCam()};
 
 /* ---- camera view / photo / record ---- */
-const c2=new THREE.PerspectiveCamera(70,16/9,.01,500),qFlip=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),Math.PI);
+const c2=new THREE.PerspectiveCamera(70,16/9,XR_DEPTH_NEAR,500),qFlip=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),Math.PI);
 function renderCam(){
   if(cst.mode===1){c2.position.copy(hp);c2.quaternion.copy(hq)}
   else{c2.position.copy(cm.localToWorld(A.set(0,.03,cst.mode===2?.04:-.04)));c2.quaternion.copy(cm.quaternion);if(cst.mode===2)c2.quaternion.multiply(qFlip)}
