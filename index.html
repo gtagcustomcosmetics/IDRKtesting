@@ -1383,7 +1383,7 @@ renderer.xr.addEventListener('sessionend',()=>{if(kb.open){kb.open=false;kb.g.vi
 
 // ---------- Camera rig (ported from Gorilla Cam Lab) ----------
 // Grab with GRIP next to a handle (both handles = two-hand hold). Let go and it floats like a tripod.
-// Buttons are pressed with the hand LASER + TRIGGER, same as the menu. While holding: TRIGGER = photo, right stick up/down = FOV.
+// Buttons are pressed with the hand LASER + TRIGGER, same as the menu. While holding: right stick up/down = FOV. Photos only come from the PHOTO button on the camera (point the free hand's laser at it and press trigger).
 let camTick=()=>{},camBring=()=>{};
 {
 const HX=.31,MODES=['THIRD','FIRST','SELFIE'],CS=VS;
@@ -1579,12 +1579,12 @@ camTick=function(dt){
   // right stick up/down = FOV while holding the camera
   const g1=byHand[1]&&byHand[1].gp;
   if(hs.some(h=>h.hold)&&g1&&g1.axes&&g1.axes.length>=4&&Math.abs(g1.axes[3])>.2)cst.fov+=g1.axes[3]*40*dt;
-  // trigger: photo (holding hand) / laser-press on camera buttons (free hand)
+  // laser-press on the camera's buttons (free hand)
   for(let i=0;i<2;i++){
     const h=hs[i],gp=h.src&&h.src.gamepad,tr=!!(gp&&gp.buttons[0]&&gp.buttons[0].pressed),edge=tr&&!h.prevTrig;h.prevTrig=tr;
     aim[i]=false;
     if(menuOpen)continue;
-    if(h.hold){if(edge)photo();continue}
+    if(h.hold)continue; // holding the camera: the trigger does nothing (no accidental photos)
     h.ctrl.updateMatrixWorld(true);A.setFromMatrixPosition(h.ctrl.matrixWorld);B.set(0,0,-1).transformDirection(h.ctrl.matrixWorld);rc2.set(A,B);
     const hit=rc2.intersectObjects(hitObjs,false)[0];
     if(hit){
