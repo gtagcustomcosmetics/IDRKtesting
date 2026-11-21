@@ -9,7 +9,10 @@ canvas{display:block}
 #hud{position:fixed;top:10px;left:10px;color:#fff;text-shadow:0 1px 4px #000;font-size:16px;pointer-events:none;line-height:1.5}
 #state{font-size:24px;font-weight:400}
 #help{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0008;color:#fff;text-align:center;font-size:16px;line-height:1.7;cursor:pointer}
-#help #msg{max-width:520px;padding:24px;background:#000a;border-radius:14px}
+#help #msg{max-width:520px;padding:20px;background:#000a;border-radius:14px;box-sizing:border-box;max-height:calc(100vh - 130px);overflow-y:auto;overscroll-behavior:contain;position:relative;z-index:1}
+@media (max-height:700px){#help #msg{font-size:13px;line-height:1.5;padding:14px}}
+#help #cos,#help #mp{max-height:calc(100vh - 130px);overflow-y:auto;box-sizing:border-box;z-index:2}
+#VRButton{position:fixed!important;bottom:16px!important;left:50%!important;right:auto!important;transform:translateX(-50%);width:auto!important;min-width:140px;padding:12px 20px!important;z-index:100000!important;opacity:1!important;font-size:15px!important;background:#ffd54a!important;color:#000!important;border:0!important;border-radius:10px!important;cursor:pointer}
 #help b{color:#ffd54a;font-weight:400}
 #cos{position:fixed;right:16px;top:16px;max-width:230px;padding:14px;border-radius:12px;background:#000b;font-size:14px;text-align:left;cursor:default;line-height:1.5}
 #cos button{margin:2px;padding:5px 8px;border:0;border-radius:6px;background:#fff3;color:#fff;cursor:pointer;font-size:13px}
@@ -61,7 +64,7 @@ const sun=new THREE.DirectionalLight(0xffffff,2.2);sun.position.set(50,100,30);s
 const XR_DEPTH_NEAR=0.005; // 5 mm: let hands get very close to the headset camera before the VR view clips them
 const cam=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,XR_DEPTH_NEAR,500);
 const rig=new THREE.Group();scene.add(rig);rig.add(cam);
-renderer.xr.enabled=true;document.body.appendChild(VRButton.createButton(renderer));
+renderer.xr.enabled=true;{const vrb=VRButton.createButton(renderer);vrb.id='VRButton';document.body.appendChild(vrb);}
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix()});
 
 // ---------- load assets ----------
@@ -631,6 +634,8 @@ try{const sv=JSON.parse(localStorage.getItem('monkeAudio')||'{}');if(sv.mic===fa
 const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 const outDest=audioCtx.createMediaStreamDestination(),outGain=audioCtx.createGain(),inMaster=audioCtx.createGain();
 outGain.connect(outDest);inMaster.connect(audioCtx.destination);
+// recording tap: in-game camera clips get your mic, other players' voices and the game sounds
+const recDest=audioCtx.createMediaStreamDestination();outGain.connect(recDest);inMaster.connect(recDest);
 const voiceCalls=new Map(); // peer id -> {call,gain,el}
 const resumeAudio=()=>{if(audioCtx.state!=='running')audioCtx.resume().catch(()=>{})};
 ['pointerdown','click','keydown','touchstart'].forEach(ev=>addEventListener(ev,resumeAudio));
@@ -696,7 +701,7 @@ function voiceTick(){
 applyVoice();
 
 // ---------- sound effects (synthesized with WebAudio, no sound files needed) ----------
-const sfxGain=audioCtx.createGain();sfxGain.gain.value=0.7;sfxGain.connect(audioCtx.destination);
+const sfxGain=audioCtx.createGain();sfxGain.gain.value=0.7;sfxGain.connect(audioCtx.destination);sfxGain.connect(recDest);
 const noiseBuf=(()=>{const b=audioCtx.createBuffer(1,audioCtx.sampleRate,audioCtx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;return b})();
 const sfxOK=()=>sfxOn&&audioCtx.state==='running';
 const distGain=pos=>{const k=Math.max(0,1-P.g.group.position.distanceTo(pos)/VOICE_MAX_DIST);return k*k};
@@ -1578,9 +1583,11 @@ function photo(){
 }
 function toggleRec(){
   if(!cst.rec){
-    const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4'].find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m));
+    const mime=['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4'].find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m));
     if(!mime)return;
-    chunks=[];mr=new MediaRecorder(cv2.captureStream(30),{mimeType:mime,videoBitsPerSecond:5e6});
+    chunks=[];if(audioCtx.state!=='running')audioCtx.resume().catch(()=>{});
+    const rs=new MediaStream([...cv2.captureStream(30).getVideoTracks(),...recDest.stream.getAudioTracks()]);
+    mr=new MediaRecorder(rs,{mimeType:mime,videoBitsPerSecond:5e6,audioBitsPerSecond:128000});
     mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
     mr.onstop=()=>{const ty=mime.split(';')[0];saveFile(new Blob(chunks,{type:ty}),'monke-clip-'+Date.now()+'.'+(ty.includes('mp4')?'mp4':'webm'))};
     mr.start(1000);cst.rec=true;
