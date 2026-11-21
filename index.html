@@ -453,7 +453,7 @@ const cycleHat=d=>{cos.hat=(cos.hat+d+hatDefs.length)%hatDefs.length;wearHat()},
 wearHat();
 
 // ---------- multiplayer: ONE public lobby, WebRTC peer-to-peer via PeerJS ----------
-const MAX_PLAYERS=4,PEEROPTS={},BASE_ID='lokeworks-monketag-separate-lobby-7k3q'; // UNIQUE per repo: every copy of the game that uses the same BASE_ID shares the same servers
+const MAX_PLAYERS=4,PEEROPTS={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'},{urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turns:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}]}},BASE_ID='lokeworks-monketag-separate-lobby-7k3q'; // UNIQUE per repo: every copy of the game that uses the same BASE_ID shares the same servers
 let HOST_ID=BASE_ID,roomCode=''; // HOST_ID = the lobby name; roomCode = private code you entered ('' = public lobby)
 const remotes=new Map(),alias=new Map(),_tv=V(),_X=V(1,0,0);let netT=0,netHeadPitch=0;
 const key_=id=>alias.get(id)||id,fl=a=>a.map(v=>Math.round(v*100)/100);
@@ -573,11 +573,11 @@ function joinLobby(){
           resetNet();try{g.destroy()}catch(x){}setStat('Looking for the lobby...');retryJoin(2000+Math.random()*2000)}
         else if(['network','server-error','socket-error','socket-closed'].includes(e2.type)){
           resetNet();try{g.destroy()}catch(x){}setStat('Network error ('+e2.type+'), retrying...');retryJoin(4000)}
-        else if(e2.type!=='webrtc')setStat('Network error: '+e2.type);
+        else setStat('Peer error: '+e2.type+' '+String(e2.message||'').slice(0,60));
       });
     }else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){
       resetNet();try{p.destroy()}catch(x){}setStat('Network error ('+e.type+'), retrying...');retryJoin(4000);
-    }else if(e.type!=='webrtc')setStat('Network error: '+e.type);
+    }else setStat('Peer error: '+e.type+' '+String(e.message||'').slice(0,60));
   });
 }
 // keepalive that does not depend on the render loop (background tabs stop rendering, which used to get you dropped after 8s)
