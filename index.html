@@ -24,6 +24,10 @@ canvas{display:block}
 #mp #micbtn.on,#mp #hearbtn.on,#mp #sfxbtn.on{background:#9fe3a0;color:#000}
 #mp select{padding:4px 6px;border-radius:6px;border:0;font-size:14px}
 #mp #gmnote{font-size:12px;color:#ffd54a;line-height:1.3;margin-bottom:4px}
+#mp #mptabs{margin-bottom:8px}
+#mp #mptabs button{background:#fff3;color:#fff}
+#mp #mptabs button.on{background:#ffd54a;color:#000}
+#mp #codestat{color:#9fe3a0;font-size:13px}
 </style></head><body>
 <div id="hud"><div id="state"></div><div id="sub"></div></div>
 <div id="help"><div id="msg">Loading assets...</div></div>
@@ -436,17 +440,17 @@ const cycleHat=d=>{cos.hat=(cos.hat+d+hatDefs.length)%hatDefs.length;wearHat()},
 wearHat();
 
 // ---------- multiplayer: ONE public lobby, WebRTC peer-to-peer via PeerJS ----------
-const MAX_PLAYERS=4,PEEROPTS={},SERVER_COUNT=5,BASE_ID='lokeworks-monketag-separate-lobby-7k3q'; // UNIQUE per repo: every copy of the game that uses the same BASE_ID shares the same servers
-let HOST_ID=BASE_ID,curServer='1'; // HOST_ID = the lobby name of the server you are on (see switchServer)
+const MAX_PLAYERS=4,PEEROPTS={},BASE_ID='lokeworks-monketag-separate-lobby-7k3q'; // UNIQUE per repo: every copy of the game that uses the same BASE_ID shares the same servers
+let HOST_ID=BASE_ID,roomCode=''; // HOST_ID = the lobby name; roomCode = private code you entered ('' = public lobby)
 const remotes=new Map(),alias=new Map(),_tv=V(),_X=V(1,0,0);let netT=0,netHeadPitch=0;
 const key_=id=>alias.get(id)||id,fl=a=>a.map(v=>Math.round(v*100)/100);
 const mpEl=document.createElement('div');mpEl.id='mp';
-mpEl.innerHTML='<b>Lobby</b><br>Your name <input id="mpname" maxlength="14"><br>Server <select id="srv">'+Array.from({length:SERVER_COUNT},(_,i)=>'<option value="'+(i+1)+'">Server '+(i+1)+'</option>').join('')+'<option value="room">Private room</option></select> <input id="srvcode" maxlength="16" placeholder="room code" style="display:none"><div id="mpstat">Connecting...</div><small>Pick a server (up to 4 players each) or make a private room: friends who type the same room code end up together. Your name shows above your head.</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button>';
+mpEl.innerHTML='<div id="mptabs"><button id="tabLobby" class="on">Lobby</button><button id="tabNames">Names and Codes</button></div><div id="paneLobby"><div id="mpstat">Connecting...</div><small>Everyone plays in one public lobby (up to 4 players), unless you enter a private code in Names and Codes.</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button></div><div id="paneNames" style="display:none"><b>Your name</b><br><input id="mpname" maxlength="14"><br><small>Shows above your head.</small><br><b>Private code</b><br><input id="mpcode" maxlength="16" placeholder="room code"> <button id="codego">Join</button><br><button id="codeleave">Back to public lobby</button><div id="codestat"></div><small>Everyone who enters the same code plays together in their own private lobby (letters and numbers only).</small></div>';
 $('help').appendChild(mpEl);['click','mousedown'].forEach(ev=>mpEl.addEventListener(ev,e=>e.stopPropagation()));
 try{$('mpname').value=localStorage.getItem('monkeName')||''}catch(e){}
 if(!$('mpname').value)$('mpname').value='Monke'+(100+Math.floor(Math.random()*900));
 const setStat=t=>$('mpstat').textContent=t,myName=()=>($('mpname').value||'Monke').trim().slice(0,14)||'Monke';
-const updCount=()=>{if(net)setStat(`${srvLabel()}: ${remotes.size+1}/${MAX_PLAYERS} players online`)};
+const updCount=()=>{if(net)setStat(`${lobbyLabel()}: ${remotes.size+1}/${MAX_PLAYERS} players online`)};
 function mkTag(txt){
   const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');
   x.fillStyle='#0009';x.fillRect(0,8,256,48);x.fillStyle='#fff';x.font='bold 34px Utopium, sans-serif';x.textAlign='center';x.fillText(txt,128,45);
@@ -592,27 +596,31 @@ function netTick(dt){
   const g=P.g.group,a=P.g.rig.wrist[0].getWorldPosition(V()),b=P.g.rig.wrist[1].getWorldPosition(V());
   netSend({t:'s',p:fl([g.position.x,g.position.y,g.position.z]),r:Math.round(g.rotation.y*100)/100,h:fl([a.x,a.y,a.z,b.x,b.y,b.z]),s:SIZE,hp:Math.round(netHeadPitch*100)/100});
 }
-// ---------- servers: Server 1..N are public lobbies, "Private room" = your own lobby named by a code ----------
-const serverIdOf=sel=>sel.startsWith('room:')?BASE_ID+'-room-'+sel.slice(5):sel==='1'?BASE_ID:BASE_ID+'-'+sel;
-const srvLabel=()=>curServer.startsWith('room:')?'Room '+curServer.slice(5):'Server '+curServer;
-function switchServer(sel){
-  if(sel===curServer&&net)return;
-  curServer=sel;try{localStorage.setItem('monkeServer',sel)}catch(e){}
+// ---------- names and codes tab: enter a private code to play in your own lobby ----------
+const cleanCode=c=>String(c||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,16);
+const roomId=c=>c?BASE_ID+'-room-'+c:BASE_ID;
+function lobbyLabel(){return roomCode?'Private room '+roomCode:'Public lobby'}
+const paintCode=()=>{$('codestat').textContent=roomCode?'In private room: '+roomCode:'You are in the public lobby'};
+function switchRoom(code){
+  code=cleanCode(code);
+  if(code===roomCode&&net)return;
+  roomCode=code;try{localStorage.setItem('monkeRoom',code)}catch(e){}
   clearTimeout(joinTimer);resetNet();alias.clear();
   voiceCalls.forEach(v=>{try{v.call.close()}catch(e){}});voiceCalls.clear();
-  HOST_ID=serverIdOf(sel);
+  HOST_ID=roomId(code);
   Object.assign(game,{ls:false,mode:'free',phase:'wait',winner:null,msg:'',hsEnd:0,overAt:0});game.tagged.clear();game.eliminated.clear();refreshGM();
-  setStat('Connecting to '+srvLabel()+'...');joinLobby();
+  paintCode();setStat('Connecting to '+lobbyLabel()+'...');joinLobby();
 }
 {
-  const srv=$('srv'),code=$('srvcode');
-  let saved='1';try{saved=localStorage.getItem('monkeServer')||'1'}catch(e){}
-  if(!(/^[1-9]$/.test(saved)&&+saved<=SERVER_COUNT)&&!/^room:[a-z0-9]{1,16}$/.test(saved))saved='1';
-  curServer=saved;HOST_ID=serverIdOf(saved);
-  if(saved.startsWith('room:')){srv.value='room';code.value=saved.slice(5);code.style.display='inline-block'}else srv.value=saved;
-  const applyCode=()=>{const c=code.value.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,16);code.value=c;if(c)switchServer('room:'+c);else setStat('Type a room code and press Enter')};
-  srv.addEventListener('change',()=>{if(srv.value==='room'){code.style.display='inline-block';code.focus();applyCode()}else{code.style.display='none';switchServer(srv.value)}});
-  code.addEventListener('change',applyCode);
+  const tabs={tabLobby:'paneLobby',tabNames:'paneNames'};
+  Object.keys(tabs).forEach(t=>$(t).addEventListener('click',()=>Object.entries(tabs).forEach(([b,pn])=>{$(pn).style.display=b===t?'':'none';$(b).classList.toggle('on',b===t)})));
+  let saved='';try{saved=cleanCode(localStorage.getItem('monkeRoom'))}catch(e){}
+  if(saved){roomCode=saved;HOST_ID=roomId(saved);$('mpcode').value=saved}
+  paintCode();
+  const go=()=>{const c=cleanCode($('mpcode').value);$('mpcode').value=c;if(!c){$('codestat').textContent='Type a code first';return}switchRoom(c)};
+  $('codego').addEventListener('click',go);
+  $('mpcode').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+  $('codeleave').addEventListener('click',()=>{$('mpcode').value='';switchRoom('')});
 }
 joinLobby();
 
