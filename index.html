@@ -245,14 +245,15 @@ function groundBelow(x,z,referenceY){
   return Number.isFinite(y) ? y : -100000;
 }
 
-// ---------- mirror (stands in front of the spawn point, facing it) ----------
+// ---------- mirror (inside the hollow stump, on the back wall opposite the doorway, facing the room) ----------
 let selfMirror=null;
 {
-  const mx=0,mz=-3.5,base=Math.min(hgt(mx-1.5,mz),hgt(mx,mz),hgt(mx+1.5,mz));
+  const mx=-1.743,mz=-24.466,ry=-0.1745; // ry turns the mirror to face the middle of the stump; frame back sits ~3 cm off the wall at its closest point
+  const base=hgt(mx,mz,3); // stump floor (start the ray inside the stump so the roof/rim doesn't count as ground)
   const mir=new Reflector(new THREE.PlaneGeometry(3,2.2),{clipBias:0.003,textureWidth:1024,textureHeight:768,color:0xdddddd});
-  mir.position.set(mx,base+1.4,mz);scene.add(mir);selfMirror=mir;
+  mir.position.set(mx,base+1.4,mz);mir.rotation.y=ry;scene.add(mir);selfMirror=mir;
   const fr=new THREE.Mesh(new THREE.BoxGeometry(3.3,2.9,0.12),new THREE.MeshStandardMaterial({color:0x5a3a1e,roughness:0.8}));
-  fr.position.set(mx,base+1.15,mz-0.07);scene.add(fr);
+  fr.position.set(mx-Math.sin(ry)*0.07,base+1.15,mz-Math.cos(ry)*0.07);fr.rotation.y=ry;scene.add(fr);
 }
 // ---------- gorilla rig (arm bones aimed at a target direction) ----------
 function makeGorilla(){
@@ -440,7 +441,7 @@ function furTick(t){const f=g=>{if(g.tg)redTick(g,t);else if(g.fur===-1)rainbow(
 const cos={hat:0,col:0,fur:FUR_ORIG};let net=null;
 try{const sv=JSON.parse(localStorage.getItem('monkeCos')||'{}');if(sv.hat>=0&&sv.hat<hatDefs.length)cos.hat=sv.hat|0;if(sv.col>=0&&sv.col<COLS.length)cos.col=sv.col|0;if(typeof sv.fur==='number')cos.fur=(sv.fur===0xffffff&&!sv.fv2)?FUR_ORIG:sv.fur;cos.fv2=1}catch(e){}
 const cosEl=document.createElement('div');cosEl.id='cos';
-cosEl.innerHTML='<b>Wardrobe</b><div id="hl"></div><div id="cl"></div><b>Fur color</b><div id="fl"></div><small>In game: <b>H</b> hat, <b>C</b> hat color, <b>F</b> fur color.<br>Check yourself in the mirror!<br>Click outside this box to play.</small>';
+cosEl.innerHTML='<b>Wardrobe</b><div id="hl"></div><div id="cl"></div><b>Fur color</b><div id="fl"></div><small>Check yourself in the mirror!<br>Click outside this box to play.</small>';
 $('help').appendChild(cosEl);['click','mousedown'].forEach(ev=>cosEl.addEventListener(ev,e=>e.stopPropagation()));
 hatDefs.forEach((h,i)=>{const b=document.createElement('button');b.textContent=h[0];b.onclick=()=>{cos.hat=i;wearHat()};$('hl').appendChild(b)});
 COLS.forEach((c,i)=>{const d=document.createElement('span');d.className='sw';d.style.background='#'+c.toString(16).padStart(6,'0');d.onclick=()=>{cos.col=i;wearHat()};$('cl').appendChild(d)});
@@ -847,7 +848,7 @@ setInterval(refreshGM,700);refreshGM();
 
 // ---------- input ----------
 const key={},btn={0:false,2:false};let locked=false,msgShown=false;
-addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;key[e.code]=true;if(e.code==='Space'){e.preventDefault();if(!e.repeat)P.jumpBuf=0.15}if(e.code==='KeyV'||e.code==='KeyP')P.third=!P.third;if(e.code==='KeyH')cycleHat(1);if(e.code==='KeyC')cycleCol(1);if(e.code==='KeyF')cycleFur();if(e.code.startsWith('Arrow'))e.preventDefault();if(e.code==='KeyR')reset();if(e.code==='KeyT')setMic(!micOn);if(e.code==='KeyM'){if(locked)document.exitPointerLock();else renderer.domElement.requestPointerLock()}});
+addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;key[e.code]=true;if(e.code==='Space'){e.preventDefault();if(!e.repeat)P.jumpBuf=0.15}if(e.code==='KeyV'||e.code==='KeyP')P.third=!P.third;if(e.code.startsWith('Arrow'))e.preventDefault();if(e.code==='KeyR')reset();if(e.code==='KeyT')setMic(!micOn);if(e.code==='KeyM'){if(locked)document.exitPointerLock();else renderer.domElement.requestPointerLock()}});
 addEventListener('keyup',e=>key[e.code]=false);
 addEventListener('blur',()=>{for(const k in key)key[k]=false;btn[0]=btn[2]=false}); // no stuck keys after alt-tab
 addEventListener('contextmenu',e=>e.preventDefault());
@@ -1023,12 +1024,7 @@ function stepVR(dt){
     _pole.set(0,-0.6,0).addScaledVector(_rt,k?0.6:-0.6).addScaledVector(_fw,-0.5);
     ik(P.g,k,w[k].add(mv),_pole);handRot(P.g,k,byHand[k].grip.getWorldQuaternion(_cq));
   }
-  // any face button (A/B/X/Y) = respawn
-  const bp=(k,i)=>{const gp=byHand[k]&&byHand[k].gp;return !!(gp&&gp.buttons[i]&&gp.buttons[i].pressed)};
-  const pr=bp(1,4)||bp(1,5),lS=bp(0,3),lF=bp(0,4),lY=bp(0,5);
-  if(lS&&!vrLS)cycleHat(1);if(lF&&!vrLF)cycleCol(1);if(lY&&!vrLY)cycleFur();vrLS=lS;vrLF=lF;vrLY=lY;
-  if(pr&&!vrBtn){rig.position.set(0,hgt(0,0)+0.5*SIZE,0);P.vel.set(0,0,0);vrInit=true}vrBtn=pr;
-  const gp1=byHand[1]&&byHand[1].gp,st=!!(gp1&&gp1.buttons[3]&&gp1.buttons[3].pressed);if(st&&!vrStick)P.third=!P.third;vrStick=st;
+  // VR controller face buttons (A/B/X/Y) and thumbstick clicks are disabled on purpose: they do nothing.
   if(P.third){tpYaw+=Math.atan2(Math.sin(vrYaw-tpYaw),Math.cos(vrYaw-tpYaw))*Math.min(1,1.5*dt);tpOff.set(Math.sin(tpYaw)*2.4*SIZE,0.7*SIZE,Math.cos(tpYaw)*2.4*SIZE)}
   else{tpOff.set(0,0,0);tpYaw=vrYaw}
   rig.position.add(tpOff);
