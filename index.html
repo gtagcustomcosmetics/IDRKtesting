@@ -1684,9 +1684,7 @@ camTick=function(dt){
   rig.updateMatrixWorld(true);headPose();
   if(!placed){placeCam();placed=true}
   updateCam();
-  // right stick up/down = FOV while holding the camera
-  const g1=byHand[1]&&byHand[1].gp;
-  if(hs.some(h=>h.hold)&&g1&&g1.axes&&g1.axes.length>=4&&Math.abs(g1.axes[3])>.2)cst.fov+=g1.axes[3]*40*dt;
+  // (stick FOV removed - use the FOV-/FOV+ buttons on the camera)
   // laser-press on the camera's buttons (free hand)
   buttons.forEach(b=>b.userData.dn=false);
   for(let i=0;i<2;i++){
