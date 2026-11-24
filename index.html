@@ -469,7 +469,7 @@ let HOST_ID=BASE_ID,roomCode=''; // HOST_ID = the lobby name; roomCode = private
 const remotes=new Map(),alias=new Map(),_tv=V(),_X=V(1,0,0);let netT=0,netHeadPitch=0;
 const key_=id=>alias.get(id)||id,fl=a=>a.map(v=>Math.round(v*100)/100);
 const mpEl=document.createElement('div');mpEl.id='mp';
-mpEl.innerHTML='<div id="mptabs"><button id="tabLobby" class="on">Lobby</button><button id="tabNames">Name</button></div><div id="paneLobby"><div id="mpstat">Connecting...</div><small>Everyone plays in one public lobby (up to 4 players).</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button></div><div id="paneNames" style="display:none"><b>Your name</b><br><input id="mpname" maxlength="14"><br><small>Shows above your head.</small></div>';
+mpEl.innerHTML='<div id="mptabs"><button id="tabLobby" class="on">Lobby</button><button id="tabNames">Name</button></div><div id="paneLobby"><div id="mpstat">Connecting...</div><small>Everyone plays in one public lobby (up to 4 players).</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button></div><div id="paneNames" style="display:none"><b>Your name</b><br><input id="mpname" maxlength="14"><br><small>Shows above your head.</small><br><br><b>Private code</b><br><input id="codein" maxlength="16" placeholder="room code"><br><button id="codego">Join</button> <button id="codepub">Public lobby</button><div id="codestat">Now in: Public lobby</div><small>Friends who type the same code play together.</small></div>';
 $('help').appendChild(mpEl);['click','mousedown'].forEach(ev=>mpEl.addEventListener(ev,e=>e.stopPropagation()));
 try{$('mpname').value=localStorage.getItem('monkeName')||''}catch(e){}
 if(!$('mpname').value)$('mpname').value='Monke'+(100+Math.floor(Math.random()*900));
@@ -621,10 +621,10 @@ function netTick(dt){
   netSend({t:'s',p:fl([g.position.x,g.position.y,g.position.z]),r:Math.round(g.rotation.y*100)/100,h:fl([a.x,a.y,a.z,b.x,b.y,b.z]),s:SIZE,hp:Math.round(netHeadPitch*100)/100});
 }
 // ---------- names and codes tab: enter a private code to play in your own lobby ----------
-const cleanCode=c=>''; // private lobbies removed: always the public lobby
+const cleanCode=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
 const roomId=c=>c?BASE_ID+'-room-'+c:BASE_ID;
 function lobbyLabel(){return roomCode?'Private room '+roomCode:'Public lobby'}
-const paintCode=()=>{};
+const paintCode=()=>{const e=document.getElementById('codestat');if(e)e.textContent='Now in: '+lobbyLabel();const i=document.getElementById('codein');if(i&&document.activeElement!==i)i.value=roomCode};
 function switchRoom(code){
   code=cleanCode(code);
   if(code===roomCode&&net)return;
@@ -638,7 +638,11 @@ function switchRoom(code){
 {
   const tabs={tabLobby:'paneLobby',tabNames:'paneNames'};
   Object.keys(tabs).forEach(t=>$(t).addEventListener('click',()=>Object.entries(tabs).forEach(([b,pn])=>{$(pn).style.display=b===t?'':'none';$(b).classList.toggle('on',b===t)})));
-  try{localStorage.removeItem('monkeRoom')}catch(e){} // private lobbies were removed: forget any saved code so everyone lands in the public lobby
+  try{localStorage.removeItem('monkeRoom')}catch(e){} // always start in the public lobby
+  $('codego').addEventListener('click',()=>switchRoom($('codein').value));
+  $('codepub').addEventListener('click',()=>{$('codein').value='';switchRoom('')});
+  $('codein').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter')switchRoom($('codein').value)});
+  $('codein').addEventListener('keyup',e=>e.stopPropagation());
 }
 joinLobby();
 
@@ -1141,9 +1145,9 @@ const COS_BTNS=[];
 hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%5)*92,y:84+Math.floor(i/5)*92,w:84,h:84}));
 COLS.forEach((c,i)=>COS_BTNS.push({id:'col:'+i,x:52+i*52,y:298,w:44,h:44}));
 FURS.forEach((v,i)=>COS_BTNS.push({id:'fur:'+i,x:25+i*34,y:378,w:30,h:30}));
-COS_BTNS.push({id:'name',x:40,y:424,w:432,h:44},{id:'back',x:40,y:476,w:432,h:44});
+COS_BTNS.push({id:'back',x:40,y:476,w:432,h:44});
 const MOCAP_BTNS=[{id:'mc_rec',x:40,y:84,w:432,h:56},{id:'mc_exp',x:40,y:148,w:432,h:56},{id:'mc_clr',x:40,y:212,w:432,h:56},{id:'mc_map',x:40,y:276,w:432,h:56},{id:'mc_pl',x:40,y:340,w:432,h:56},{id:'back',x:40,y:408,w:432,h:44}];
-const NAMES_BTNS=[{id:'nm_name',x:40,y:84,w:432,h:56},{id:'back',x:40,y:148,w:432,h:44}];
+const NAMES_BTNS=[{id:'nm_name',x:40,y:84,w:432,h:56},{id:'nm_code',x:40,y:148,w:432,h:56},{id:'nm_pub',x:40,y:212,w:432,h:56},{id:'back',x:40,y:276,w:432,h:44}];
 let menuPage='main';const menuBtns=()=>menuPage==='cos'?COS_BTNS:menuPage==='mocap'?MOCAP_BTNS:menuPage==='names'?NAMES_BTNS:MAIN_BTNS;
 let menuHover=-1,menuDrawKey='',menuOpen=false,mPrevReq=false,mArm=false;const mPrevTrig=[false,false];
 function rr(x,y,w,h,r){menuCx.beginPath();menuCx.moveTo(x+r,y);menuCx.arcTo(x+w,y,x+w,y+h,r);menuCx.arcTo(x+w,y+h,x,y+h,r);menuCx.arcTo(x,y+h,x,y,r);menuCx.arcTo(x,y,x+w,y,r);menuCx.closePath()}
@@ -1195,9 +1199,6 @@ function drawMenu(){
           x.fillStyle=g}
         else x.fillStyle='#'+v.toString(16).padStart(6,'0');
         rr(b.x,b.y,b.w,b.h,8);x.fill();
-      }else if(b.id==='name'){
-        x.fillStyle='#7c3aed';rr(b.x,b.y,b.w,b.h,12);x.fill();
-        x.fillStyle='#fff';x.font='19px PixelNES, sans-serif';x.fillText('Name: '+myName()+'  (change)',b.x+b.w/2,b.y+b.h/2+6,b.w-16);
       }else{ // back
         x.fillStyle='#555';rr(b.x,b.y,b.w,b.h,12);x.fill();
         x.fillStyle='#fff';x.font='19px PixelNES, sans-serif';x.fillText('< Back',b.x+b.w/2,b.y+b.h/2+6,b.w-16);
@@ -1212,6 +1213,8 @@ function drawMenu(){
     menuBtns().forEach((b,i)=>{
       let col='#555',txt='< Back';
       if(b.id==='nm_name'){col='#7c3aed';txt='Name: '+myName()+'  (change)'}
+      else if(b.id==='nm_code'){col='#0ea5a4';txt='Private code: '+(roomCode||'none')+'  (enter)'}
+      else if(b.id==='nm_pub'){col='#3ecf6a';txt='Join public lobby'}
       x.fillStyle=col;rr(b.x,b.y,b.w,b.h,12);x.fill();
       if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
       x.fillStyle='#fff';x.font='19px PixelNES, sans-serif';x.fillText(txt,b.x+b.w/2,b.y+b.h/2+6,b.w-16);
@@ -1279,13 +1282,14 @@ function menuClick(id){
   else if(id==='mocap'){menuPage='mocap';menuHover=-1;menuDrawKey=''}
   else if(id==='names'){menuPage='names';menuHover=-1;menuDrawKey=''}
   else if(id==='nm_name'){setMenu(false);kbOpen('name')}
+  else if(id==='nm_code'){setMenu(false);kbOpen('code')}
+  else if(id==='nm_pub'){switchRoom('')}
   else if(id==='mc_rec'){mocapToggle();if(mocap.rec)setMenu(false)}
   else if(id==='mc_exp')mocapExport();
   else if(id==='mc_clr')mocapClear();
   else if(id==='mc_map'){mocap.map=!mocap.map;try{localStorage.setItem('monkeMocapMap',mocap.map?'1':'0')}catch(e){}}
   else if(id==='mc_pl'){mocap.players=!mocap.players;try{localStorage.setItem('monkeMocapPlayers',mocap.players?'1':'0')}catch(e){}}
   else if(id==='back'){menuPage='main';menuHover=-1;menuDrawKey=''}
-  else if(id==='name'){setMenu(false);kbOpen('name')}
   else if(id.startsWith('hat:')){cos.hat=+id.slice(4);wearHat()}
   else if(id.startsWith('col:')){cos.col=+id.slice(4);wearHat()}
   else if(id.startsWith('fur:')){cos.fur=FURS[+id.slice(4)];wearHat()}
