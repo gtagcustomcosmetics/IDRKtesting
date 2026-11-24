@@ -904,7 +904,7 @@ function stepPlayer(dt){
   P.g.group.rotation.y=P.yaw+PI;P.g.group.updateMatrixWorld(true);gq.copy(P.g.group.quaternion);
   // PC knuckle-walk: while walking on the ground, each free arm reaches forward, plants, then drags back, alternating left/right.
   // These arms are visual only (they don't push the body), so walking speed is unchanged. Holding Q / E still gives you manual control.
-  const walking=!!(forward||strafe)&&P.gnd&&P.jumpT<=0;
+  const walking=!!(forward||strafe)&&P.jumpT<=0&&(P.gnd||P.vel.y>-3*SIZE);
   if(walking)P.gait+=dt*PI*2*2.2*(forward<0?-1:1);
   for(let k=0;k<2;k++){
     P.proc[k]=false;if(act[k])continue;
@@ -1776,7 +1776,7 @@ renderer.setAnimationLoop(()=>{
   if(renderer.xr.isPresenting){}
   else if(P.third){cam.position.copy(P.pos).addScaledVector(f,-3.2*SIZE).add(V(0,1.4*SIZE,0));cam.lookAt(P.pos)}
   else{P.g.rig.head.updateWorldMatrix(true,false);P.g.rig.head.getWorldPosition(_eyeP);_eyeP.add(_eyeV.copy(EYE_OFF).applyQuaternion(P.g.group.quaternion).multiplyScalar(SIZE));cam.position.copy(_eyeP);cam.rotation.set(P.pitch,P.yaw,0,'YXZ')}
-  $('sub').textContent=`Speed: ${P.vel.length().toFixed(1)} m/s`;
+  $('sub').textContent=`Speed: ${P.vel.length().toFixed(1)} m/s  gnd:${P.gnd?1:0} proc:${P.proc[0]?1:0}${P.proc[1]?1:0} a:${P.a[0].toFixed(2)},${P.a[1].toFixed(2)}`;
   setSelfHead(!P.third);renderer.render(scene,cam);setSelfHead(false);
 });
 </script></body></html>
