@@ -396,7 +396,7 @@ function handRot(g,k,cq){
   fixWrist(g,k,_wq);
 }
 // ---------- player ----------
-const P={g:makeGorilla(),pos:V(),vel:V(),yaw:0,pitch:0,a:[0,0],b:[.15,.15],prev:[V(),V()],touch:[false,false],ht:[false,false],htT:[0,0],hist:[],third:false,was:false};
+const P={g:makeGorilla(),pos:V(),vel:V(),yaw:0,pitch:0,a:[0,0],b:[.15,.15],prev:[V(),V()],touch:[false,false],ht:[false,false],htT:[0,0],hist:[],third:false,was:false,gait:0,proc:[false,false]};
 const JUMP_V=5.2; // jump launch speed (about 1.4 m high)
 function reset(){P.pos.set(0,0,0);
   // start a little above the ground and let gravity settle you (the ray starts near the spawn so roofs/branches overhead don't count as floor)
@@ -469,7 +469,7 @@ let HOST_ID=BASE_ID,roomCode=''; // HOST_ID = the lobby name; roomCode = private
 const remotes=new Map(),alias=new Map(),_tv=V(),_X=V(1,0,0);let netT=0,netHeadPitch=0;
 const key_=id=>alias.get(id)||id,fl=a=>a.map(v=>Math.round(v*100)/100);
 const mpEl=document.createElement('div');mpEl.id='mp';
-mpEl.innerHTML='<div id="mptabs"><button id="tabLobby" class="on">Lobby</button><button id="tabNames">Name</button></div><div id="paneLobby"><div id="mpstat">Connecting...</div><small>Everyone plays in one public lobby (up to 4 players).</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button></div><div id="paneNames" style="display:none"><b>Your name</b><br><input id="mpname" maxlength="14"><br><small>Shows above your head.</small><br><br><b>Private code</b><br><input id="codein" maxlength="16" placeholder="room code"><br><button id="codego">Join</button> <button id="codepub">Public lobby</button><div id="codestat">Now in: Public lobby</div><small>Friends who type the same code play together.</small></div>';
+mpEl.innerHTML='<div id="mptabs"><button id="tabLobby" class="on">Lobby</button><button id="tabNames">Names and codes</button></div><div id="paneLobby"><div id="mpstat">Connecting...</div><small>Public lobby by default, or enter a private code on the Names and codes tab (up to 4 players per room).</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button></div><div id="paneNames" style="display:none"><b>Your name</b><br><input id="mpname" maxlength="14"><br><small>Shows above your head.</small><br><br><b>Private code</b><br><input id="codein" maxlength="16" placeholder="room code"><br><button id="codego">Join</button> <button id="codepub">Public lobby</button><div id="codestat">Now in: Public lobby</div><small>Friends who type the same code play together.</small></div>';
 $('help').appendChild(mpEl);['click','mousedown'].forEach(ev=>mpEl.addEventListener(ev,e=>e.stopPropagation()));
 try{$('mpname').value=localStorage.getItem('monkeName')||''}catch(e){}
 if(!$('mpname').value)$('mpname').value='Monke'+(100+Math.floor(Math.random()*900));
@@ -902,13 +902,27 @@ function stepPlayer(dt){
     P.b[k]=Math.max(-0.3,Math.min(1.5,P.b[k]+kx*5*dt*(k?1:-1)));
   }
   P.g.group.rotation.y=P.yaw+PI;P.g.group.updateMatrixWorld(true);gq.copy(P.g.group.quaternion);
-  for(let k=0;k<2;k++)if(!act[k]&&!P.touch[k]){P.a[k]+=(0-P.a[k])*Math.min(1,6*dt);P.b[k]+=(0.15-P.b[k])*Math.min(1,6*dt)}
+  // PC knuckle-walk: while walking on the ground, each free arm reaches forward, plants, then drags back, alternating left/right.
+  // These arms are visual only (they don't push the body), so walking speed is unchanged. Holding Q / E still gives you manual control.
+  const walking=!!(forward||strafe)&&P.gnd&&P.jumpT<=0;
+  if(walking)P.gait+=dt*PI*2*2.2*(forward<0?-1:1);
+  for(let k=0;k<2;k++){
+    P.proc[k]=false;if(act[k])continue;
+    if(walking){
+      P.proc[k]=true;P.touch[k]=false;P.ht[k]=false;
+      const ph=((((P.gait+k*PI)%(2*PI))+2*PI)%(2*PI))/(2*PI);let ta,tb;
+      if(ph<0.4){const u=ph/0.4,e=1-(1-u)*(1-u);ta=-0.45+1.2*e;tb=0.15+0.3*Math.sin(PI*u)} // quick swing forward, lifted a bit
+      else{const u=(ph-0.4)/0.6;ta=0.75-1.2*u;tb=0.15} // planted hand drags back
+      if(!forward)tb+=0.25; // strafing: arms reach out to the side more
+      P.a[k]+=(ta-P.a[k])*Math.min(1,28*dt);P.b[k]+=(tb-P.b[k])*Math.min(1,28*dt); // fast follow so the steps look snappy
+    }else if(!P.touch[k]){P.a[k]+=(0-P.a[k])*Math.min(1,6*dt);P.b[k]+=(0.15-P.b[k])*Math.min(1,6*dt)}
+  }
   disp.set(0,0,0);let touching=false;const off=[V(),V()],ow=[V(),V()];
   for(let k=0;k<2;k++){
     armOffset(P.g,k,P.a[k],P.b[k],off[k]);ow[k].copy(off[k]).applyQuaternion(gq).multiplyScalar(SIZE);
     _p.copy(P.prev[k]).applyQuaternion(gq).multiplyScalar(SIZE);_dl.subVectors(ow[k],_p);
     const wx=P.pos.x+ow[k].x,wy=P.pos.y+ow[k].y,wz=P.pos.z+ow[k].z;
-    if(MapCol.near(wx,wy,wz,RHs+0.03)){disp.sub(_dl);touching=true;P.touch[k]=true;handHit(k,_dl.length()/dt)}else{P.touch[k]=false;P.ht[k]=false}
+    if(!P.proc[k]&&MapCol.near(wx,wy,wz,RHs+0.03)){disp.sub(_dl);touching=true;P.touch[k]=true;handHit(k,_dl.length()/dt)}else{P.touch[k]=false;P.ht[k]=false}
     P.prev[k].copy(off[k]);
   }
   if(P.jumpT>0){touching=false;P.touch[0]=P.touch[1]=false;P.ht[0]=P.ht[1]=false;disp.set(0,0,0)} // no hand-push while leaving the ground
@@ -1250,7 +1264,7 @@ function drawMenu(){
     else if(b.id==='mode'){col=isHost()?'#b45309':'#444';txt='Game mode: '+(game.mode==='tag'?'TAG':'CASUAL')+(isHost()?'':' (host only)')}
     else if(b.id==='cam'){col='#8b5cf6';txt='Bring camera to me'}
     else if(b.id==='cos'){col='#db2777';txt='Cosmetics  >'}
-    else if(b.id==='names'){col='#7c3aed';txt='Name  >'}
+    else if(b.id==='names'){col='#7c3aed';txt='Names and codes  >'}
     else if(b.id==='mocap'){col=mocap.rec?'#d9534f':'#0ea5a4';txt=mocap.rec?'Mocap: REC '+mocapSecs()+'s  >':'Mocap  >'}
     x.fillStyle=col;rr(b.x,b.y,b.w,b.h,12);x.fill();
     if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
@@ -1579,7 +1593,7 @@ const title=document.createElement('div');title.id='pmtitle';pm.appendChild(titl
 const pages={},upds=[];
 const mk=n=>{const d=document.createElement('div');pages[n]=d;pm.appendChild(d);return d};
 const refresh=()=>upds.forEach(u=>u());
-const show=n=>{Object.entries(pages).forEach(([k,d])=>d.style.display=k===n?'block':'none');title.textContent={main:'MENU',cos:'COSMETICS',names:'NAMES AND CODES',mocap:'MOCAP'}[n];refresh()};
+const show=n=>{Object.entries(pages).forEach(([k,d])=>d.style.display=k===n?'block':'none');title.textContent={main:'MENU',cos:'COSMETICS',names:'NAMES AND CODES',mocap:'MOCAP'}[n];if(n==='names'){const t=document.getElementById('tabNames');if(t)t.click()}refresh()};
 const btn=(pg,fn,upd)=>{const b=document.createElement('button');b.className='pmb';b.onclick=()=>{fn();refresh()};pg.appendChild(b);upds.push(()=>{const r=upd();b.textContent=r[0];b.style.background=r[1];b.style.color=r[2]||'#fff';b.style.opacity=r[3]?.45:1});return b};
 const onoff=(v,t,x)=>[t+': '+(v?'ON':'OFF')+(x||''),v?'#3ecf6a':'#d9534f',v?'#000':'#fff'];
 const resume=()=>renderer.domElement.requestPointerLock();
@@ -1591,13 +1605,14 @@ btn(main,()=>{setSfx(!sfxOn);if(sfxOn)sfxClick()},()=>onoff(sfxOn,'Sounds'));
 btn(main,()=>{if(isHost())hostSetMode(game.mode==='tag'?'free':'tag')},()=>['Game mode: '+(game.mode==='tag'?'TAG':'CASUAL')+(isHost()?'':' (host only)'),isHost()?'#b45309':'#444']);
 btn(main,()=>{camBring();resume()},()=>['Bring camera to me','#8b5cf6']);
 btn(main,()=>show('cos'),()=>['Cosmetics  >','#db2777']);
-btn(main,()=>show('names'),()=>['Name  >','#7c3aed']);
+btn(main,()=>show('names'),()=>['Names and codes  >','#7c3aed']);
 btn(main,()=>show('mocap'),()=>[mocap.rec?'Mocap: REC '+mocapSecs()+'s  >':'Mocap  >',mocap.rec?'#d9534f':'#0ea5a4']);
 gb.className='pmb';gb.style.background='#2a9df4';gb.style.color='#fff';main.appendChild(gb);
 btn(main,resume,()=>['Resume','#444']);
 const hint=document.createElement('small');hint.innerHTML='WASD move, Space jump, Q / E + mouse = arms, R reset, P third person, T mic, M menu';main.appendChild(hint);
 back(cp);cp.appendChild(cosEl);
 back(np);np.appendChild(mpEl);
+{const mt=mpEl.querySelector('#mptabs');if(mt)mt.style.display='none';const pl=mpEl.querySelector('#paneLobby');if(pl)pl.style.display='none';const pn=mpEl.querySelector('#paneNames');if(pn)pn.style.display='block'} // PC page: show name + private code directly, no inner tabs
 back(mp);
 btn(mp,()=>{mocapToggle();if(mocap.rec)resume()},()=>[mocap.rec?'Stop  ('+mocapSecs()+'s)':'Record',mocap.rec?'#d9534f':'#c0392b']);
 btn(mp,()=>mocapExport(),()=>{const n=mocap.times.length;return ['Export GLB'+(n?'  ('+n+' frames)':''),'#8b5cf6','#fff',n<2||mocap.busy]});
