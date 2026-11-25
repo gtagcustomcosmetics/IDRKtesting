@@ -1084,7 +1084,9 @@ function stepVR(dt){
     _pole.set(0,-0.6,0).addScaledVector(_rt,k?0.6:-0.6).addScaledVector(_fw,-0.5);
     ik(P.g,k,w[k].add(mv),_pole);handRot(P.g,k,byHand[k].grip.getWorldQuaternion(_cq));
   }
-  // VR controller face buttons (A/B/X/Y) and thumbstick clicks are disabled on purpose: they do nothing.
+  // Thumbstick click (either joystick) toggles third person. A/B/X/Y stay disabled.
+  {let sp=false;for(let k=0;k<2;k++){const g=byHand[k]&&byHand[k].gp;if(g&&g.buttons&&g.buttons[3]&&g.buttons[3].pressed)sp=true}
+    if(sp&&!window._stPrev)P.third=!P.third;window._stPrev=sp}
   if(P.third){tpYaw+=Math.atan2(Math.sin(vrYaw-tpYaw),Math.cos(vrYaw-tpYaw))*Math.min(1,1.5*dt);tpOff.set(Math.sin(tpYaw)*2.4*SIZE,0.7*SIZE,Math.cos(tpYaw)*2.4*SIZE)}
   else{tpOff.set(0,0,0);tpYaw=vrYaw}
   rig.position.add(tpOff);
