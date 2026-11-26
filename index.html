@@ -466,7 +466,7 @@ wearHat();
 // ---------- multiplayer: ONE public lobby, WebRTC peer-to-peer via PeerJS ----------
 const MAX_PLAYERS=4,PEEROPTS={},BASE_ID='lokeworks-monketag-separate-lobby-7k3q'; // UNIQUE per repo: every copy of the game that uses the same BASE_ID shares the same servers
 let HOST_ID=BASE_ID,roomCode=''; // HOST_ID = the lobby name; roomCode = private code you entered ('' = public lobby)
-const remotes=new Map(),alias=new Map(),_tv=V(),_X=V(1,0,0);let netT=0,netHeadPitch=0;
+const remotes=new Map(),alias=new Map(),_tv=V(),_X=V(1,0,0),_Z=V(0,0,1);let netT=0,netHeadPitch=0,netHeadRoll=0;
 const key_=id=>alias.get(id)||id,fl=a=>a.map(v=>Math.round(v*100)/100);
 const mpEl=document.createElement('div');mpEl.id='mp';
 mpEl.innerHTML='<div id="mptabs"><button id="tabLobby" class="on">Lobby</button><button id="tabNames">Names and codes</button></div><div id="paneLobby"><div id="mpstat">Connecting...</div><small>Public lobby by default, or enter a private code on the Names and codes tab (up to 4 players per room).</small><br>Game mode <select id="gm"><option value="free">Casual</option><option value="tag">Tag</option></select><div id="gmnote"></div><button id="micbtn"></button><button id="hearbtn"></button><button id="sfxbtn"></button></div><div id="paneNames" style="display:none"><b>Your name</b><br><input id="mpname" maxlength="14"><br><small>Shows above your head.</small><br><br><b>Private code</b><br><input id="codein" maxlength="16" placeholder="room code"><br><button id="codego">Join</button> <button id="codepub">Public lobby</button><div id="codestat">Now in: Public lobby</div><small>Friends who type the same code play together.</small></div>';
@@ -604,7 +604,7 @@ function stepRemotes(dt){
   const k=Math.min(1,12*dt);
   remotes.forEach(r=>{const d=r.tp;if(!d)return;
     r.pos.lerp(_tv.set(d.p[0],d.p[1],d.p[2]),k);r.ry+=Math.atan2(Math.sin(d.r-r.ry),Math.cos(d.r-r.ry))*k;
-    r.g.group.position.copy(r.pos);r.g.group.scale.setScalar(d.s||1);r.g.group.rotation.y=r.ry;if(r.headBaseQ)r.g.rig.head.quaternion.copy(r.headBaseQ).multiply(new THREE.Quaternion().setFromAxisAngle(_X,-(d.hp||0)));r.g.group.updateMatrixWorld(true);
+    r.g.group.position.copy(r.pos);r.g.group.scale.setScalar(d.s||1);r.g.group.rotation.y=r.ry;if(r.headBaseQ)r.g.rig.head.quaternion.copy(r.headBaseQ).multiply(new THREE.Quaternion().setFromAxisAngle(_X,-(d.hp||0))).multiply(new THREE.Quaternion().setFromAxisAngle(_Z,-(d.hr||0)));r.g.group.updateMatrixWorld(true);
     const yaw=r.ry-PI;_fw.set(-Math.sin(yaw),0,-Math.cos(yaw));_rt.set(Math.cos(yaw),0,-Math.sin(yaw));
     for(let i=0;i<2;i++){r.h[i].lerp(_tv.set(d.h[i*3],d.h[i*3+1],d.h[i*3+2]),k);
       _pole.set(0,-.6,0).addScaledVector(_rt,i?.6:-.6).addScaledVector(_fw,-.5);ik(r.g,i,r.h[i],_pole)}
@@ -618,7 +618,7 @@ function netTick(dt){
   remotes.forEach((r,id)=>{if(now-r.last>15000){net.conns.forEach((c,k)=>{if(key_(k)===id){try{c.close()}catch(e){}net.conns.delete(k);if(isHostKey(k)&&!net.host)claimHost()}});dropRemote(id)}});
   netT-=dt;if(netT>0||!net.conns.size)return;netT=1/15;
   const g=P.g.group,a=P.g.rig.wrist[0].getWorldPosition(V()),b=P.g.rig.wrist[1].getWorldPosition(V());
-  netSend({t:'s',p:fl([g.position.x,g.position.y,g.position.z]),r:Math.round(g.rotation.y*100)/100,h:fl([a.x,a.y,a.z,b.x,b.y,b.z]),s:SIZE,hp:Math.round(netHeadPitch*100)/100});
+  netSend({t:'s',p:fl([g.position.x,g.position.y,g.position.z]),r:Math.round(g.rotation.y*100)/100,h:fl([a.x,a.y,a.z,b.x,b.y,b.z]),s:SIZE,hp:Math.round(netHeadPitch*100)/100,hr:Math.round(netHeadRoll*100)/100});
 }
 // ---------- names and codes tab: enter a private code to play in your own lobby ----------
 const cleanCode=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
@@ -1014,7 +1014,7 @@ renderer.xr.addEventListener('sessionend',()=>{rig.scale.setScalar(1);rig.positi
   setHead(1);P.g.rig.head.quaternion.copy(_headBaseQ);tpOff.set(0,0,0);[0,1].forEach(k=>{P.g.rig.upper[k].scale.set(1,1,1);P.g.rig.wrist[k].scale.copy(P.g.rig.ws0[k]);P.g.rig.wrist[k].matrixAutoUpdate=true});reset();if(!locked)$('help').style.display='flex'});
 const _hd=V();
 // Track headset pitch on the avatar's head bone without tilting the torso.
-const _headBaseQ=P.g.rig.head.quaternion.clone(),_headWorldQ=new THREE.Quaternion(),_rigWorldQ=new THREE.Quaternion(),_headLocalQ=new THREE.Quaternion(),_headPitchQ=new THREE.Quaternion(),_headPitchAxis=V(1,0,0);
+const _headBaseQ=P.g.rig.head.quaternion.clone(),_headWorldQ=new THREE.Quaternion(),_rigWorldQ=new THREE.Quaternion(),_headLocalQ=new THREE.Quaternion(),_headPitchQ=new THREE.Quaternion(),_headPitchAxis=V(1,0,0),_headRollQ=new THREE.Quaternion(),_headRollAxis=V(0,0,1);
 const SNAP=PI/6,SMOOTH=PI*0.6,_Y=V(0,1,0),TURN_NAMES=['Off','Snap','Smooth'];let vrSnap=false;
 let turnMode=1; // 0 = off, 1 = snap, 2 = smooth (right stick left/right)
 try{const sv=localStorage.getItem('monkeTurn');if(sv!==null&&+sv>=0&&+sv<=2)turnMode=+sv}catch(e){}
@@ -1075,10 +1075,11 @@ function stepVR(dt){
   _headLocalQ.copy(xc.quaternion); // headset pose relative to the rig; the rig's own turn is added to vrYaw below
   _eu.setFromQuaternion(_headLocalQ,'YXZ');
   const headPitch=Math.max(-1.0,Math.min(1.0,_eu.x));netHeadPitch=headPitch;
+  const headRoll=Math.max(-0.8,Math.min(0.8,_eu.z));netHeadRoll=headRoll; // ear-to-shoulder tilt
   vrYaw=_eu.y+rig.rotation.y;
   _fw.set(-Math.sin(vrYaw),0,-Math.cos(vrYaw));_rt.set(Math.cos(vrYaw),0,-Math.sin(vrYaw));
   gg.position.copy(P.pos).addScaledVector(_fw,-0.28*SIZE);gg.rotation.y=vrYaw+PI;
-  P.g.rig.head.quaternion.copy(_headBaseQ).multiply(_headPitchQ.setFromAxisAngle(_headPitchAxis,-headPitch));
+  P.g.rig.head.quaternion.copy(_headBaseQ).multiply(_headPitchQ.setFromAxisAngle(_headPitchAxis,-headPitch)).multiply(_headRollQ.setFromAxisAngle(_headRollAxis,-headRoll));
   gg.updateMatrixWorld(true);
   for(let k=0;k<2;k++)if(w[k]){
     _pole.set(0,-0.6,0).addScaledVector(_rt,k?0.6:-0.6).addScaledVector(_fw,-0.5);
@@ -1611,7 +1612,7 @@ function renderCam(){
     // Position = head bone + the same EYE_OFF the flat-screen first-person view uses. Rotation = avatar yaw (left/right) + head pitch (up/down), same values that drive the body and head bone.
     P.g.rig.head.updateWorldMatrix(true,false);P.g.rig.head.getWorldPosition(c2.position);
     c2.position.add(_fpO.copy(EYE_OFF).applyQuaternion(P.g.group.quaternion).multiplyScalar(SIZE));
-    c2.quaternion.setFromEuler(_fpE.set(netHeadPitch,vrYaw,0,'YXZ'));
+    c2.quaternion.setFromEuler(_fpE.set(netHeadPitch,vrYaw,netHeadRoll,'YXZ'));
     hideHead=true; // the camera sits inside the head, so hide the head + hat while this view is drawn
   }
   else{c2.position.copy(cm.localToWorld(A.set(0,LENS_Y,cst.mode===2?SELFIE_Z:LENS_Z)));c2.quaternion.copy(cm.quaternion);if(cst.mode===2)c2.quaternion.multiply(qFlip)}
