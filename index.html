@@ -1603,13 +1603,24 @@ camBring=()=>{rig.updateMatrixWorld(true);headPose();placeCam()};
 
 /* ---- camera view / photo / record ---- */
 const c2=new THREE.PerspectiveCamera(70,16/9,XR_DEPTH_NEAR,500),qFlip=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),Math.PI);
+const _fpO=V(),_fpE=new THREE.Euler();
 function renderCam(){
-  if(cst.mode===1){c2.position.copy(hp);c2.quaternion.copy(hq)}
+  let hideHead=false;
+  if(cst.mode===1){
+    // FIRST mode: film from the avatar's head bone, not the headset (the headset sits out in the third-person view).
+    // Position = head bone + the same EYE_OFF the flat-screen first-person view uses. Rotation = avatar yaw (left/right) + head pitch (up/down), same values that drive the body and head bone.
+    P.g.rig.head.updateWorldMatrix(true,false);P.g.rig.head.getWorldPosition(c2.position);
+    c2.position.add(_fpO.copy(EYE_OFF).applyQuaternion(P.g.group.quaternion).multiplyScalar(SIZE));
+    c2.quaternion.setFromEuler(_fpE.set(netHeadPitch,vrYaw,0,'YXZ'));
+    hideHead=true; // the camera sits inside the head, so hide the head + hat while this view is drawn
+  }
   else{c2.position.copy(cm.localToWorld(A.set(0,LENS_Y,cst.mode===2?SELFIE_Z:LENS_Z)));c2.quaternion.copy(cm.quaternion);if(cst.mode===2)c2.quaternion.multiply(qFlip)}
   c2.fov=cst.fov;c2.updateProjectionMatrix();
   const hv=hudPlane.visible,mv=menuG.visible,lv=lasers.map(l=>l.visible);
   cm.visible=false;menuG.visible=false;hudPlane.visible=false;lasers.forEach(l=>l.visible=false);
+  if(hideHead)setSelfHead(true);
   r2.render(scene,c2);
+  if(hideHead)setSelfHead(false);
   cm.visible=true;menuG.visible=mv;hudPlane.visible=hv;lasers.forEach((l,i)=>l.visible=lv[i]);
   tex.needsUpdate=true;
 }
