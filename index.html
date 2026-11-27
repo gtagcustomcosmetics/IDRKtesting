@@ -1239,13 +1239,14 @@ const menuIds=['mic','hear','sfx','turn','mode','cam','cos','names','mocap','clo
 const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:60+i*49,w:432,h:43}));
 // cosmetics page: hat thumbnails (5 per row), hat colors, fur colors, back button
 const COS_BTNS=[];
-hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%5)*92,y:84+Math.floor(i/5)*92,w:84,h:84}));
+hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%6)*80,y:84+Math.floor(i/6)*80,w:72,h:72}));
 COLS.forEach((c,i)=>COS_BTNS.push({id:'col:'+i,x:52+i*52,y:298,w:44,h:44}));
 FURS.forEach((v,i)=>COS_BTNS.push({id:'fur:'+i,x:25+i*34,y:378,w:30,h:30}));
-COS_BTNS.push({id:'back',x:40,y:476,w:432,h:44});
+COS_BTNS.push({id:'hppage',x:40,y:420,w:432,h:44});COS_BTNS.push({id:'back',x:40,y:476,w:432,h:44});
+const HP_BTNS=[{id:'hp_up',x:186,y:84,w:140,h:64},{id:'hp_left',x:40,y:160,w:140,h:64},{id:'hp_right',x:332,y:160,w:140,h:64},{id:'hp_down',x:186,y:236,w:140,h:64},{id:'hp_reset',x:40,y:330,w:432,h:50},{id:'hpback',x:40,y:476,w:432,h:44}];
 const MOCAP_BTNS=[{id:'mc_rec',x:40,y:84,w:432,h:56},{id:'mc_exp',x:40,y:148,w:432,h:56},{id:'mc_clr',x:40,y:212,w:432,h:56},{id:'mc_map',x:40,y:276,w:432,h:56},{id:'mc_pl',x:40,y:340,w:432,h:56},{id:'back',x:40,y:408,w:432,h:44}];
 const NAMES_BTNS=[{id:'nm_name',x:40,y:84,w:432,h:56},{id:'nm_code',x:40,y:148,w:432,h:56},{id:'nm_pub',x:40,y:212,w:432,h:56},{id:'back',x:40,y:276,w:432,h:44}];
-let menuPage='main';const menuBtns=()=>menuPage==='cos'?COS_BTNS:menuPage==='mocap'?MOCAP_BTNS:menuPage==='names'?NAMES_BTNS:MAIN_BTNS;
+let menuPage='main';const menuBtns=()=>menuPage==='cos'?COS_BTNS.filter(b=>b.id!=='hppage'||cos.hat===10):menuPage==='hp'?HP_BTNS:menuPage==='mocap'?MOCAP_BTNS:menuPage==='names'?NAMES_BTNS:MAIN_BTNS;
 let menuHover=-1,menuDrawKey='',menuOpen=false,mPrevReq=false,mArm=false;const mPrevTrig=[false,false];
 function rr(x,y,w,h,r){menuCx.beginPath();menuCx.moveTo(x+r,y);menuCx.arcTo(x+w,y,x+w,y+h,r);menuCx.arcTo(x+w,y+h,x,y+h,r);menuCx.arcTo(x,y+h,x,y,r);menuCx.arcTo(x,y,x+w,y,r);menuCx.closePath()}
 // little pictures of each hat for the cosmetics page (drawn once per hat+color by a tiny separate renderer)
@@ -1272,11 +1273,11 @@ function hatThumb(hi,ci){
   return c;
 }
 function drawMenu(){
-  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost()+'|'+mocap.rec+'|'+(mocap.times.length>>4)+'|'+mocap.busy+'|'+mocap.msg+'|'+mocap.map+'|'+mocap.players+'|'+myName()+'|'+roomCode;
+  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost()+'|'+mocap.rec+'|'+(mocap.times.length>>4)+'|'+mocap.busy+'|'+mocap.msg+'|'+mocap.map+'|'+mocap.players+'|'+myName()+'|'+roomCode+'|'+headphoneOffset.x+'|'+headphoneOffset.y;
   if(key===menuDrawKey)return;menuDrawKey=key;
   const x=menuCx;x.clearRect(0,0,MW,MH);
   x.fillStyle='rgba(0,0,0,.88)';rr(0,0,MW,MH,28);x.fill();
-  x.fillStyle='#fff';x.font='30px WebTag, sans-serif';x.textAlign='center';x.fillText(menuPage==='cos'?'COSMETICS':menuPage==='mocap'?'MOCAP':menuPage==='names'?'NAMES AND CODES':'MENU',MW/2,43);
+  x.fillStyle='#fff';x.font='30px WebTag, sans-serif';x.textAlign='center';x.fillText(menuPage==='cos'?'COSMETICS':menuPage==='mocap'?'MOCAP':menuPage==='names'?'NAMES AND CODES':menuPage==='hp'?'HEADPHONES':'MENU',MW/2,43);
   if(menuPage==='cos'){
     const hb=menuBtns()[menuHover],hovHat=hb&&hb.id.startsWith('hat:')?+hb.id.slice(4):cos.hat;
     x.fillStyle='#ccc';x.font='18px WebTag, sans-serif';x.textAlign='left';
@@ -1296,6 +1297,9 @@ function drawMenu(){
           x.fillStyle=g}
         else x.fillStyle='#'+v.toString(16).padStart(6,'0');
         rr(b.x,b.y,b.w,b.h,8);x.fill();
+      }else if(k==='hppage'){
+        x.fillStyle='#db2777';rr(b.x,b.y,b.w,b.h,12);x.fill();
+        x.fillStyle='#fff';x.font='19px WebTag, sans-serif';x.fillText('Headphone position  >',b.x+b.w/2,b.y+b.h/2+6,b.w-16);
       }else{ // back
         x.fillStyle='#555';rr(b.x,b.y,b.w,b.h,12);x.fill();
         x.fillStyle='#fff';x.font='19px WebTag, sans-serif';x.fillText('< Back',b.x+b.w/2,b.y+b.h/2+6,b.w-16);
@@ -1303,6 +1307,19 @@ function drawMenu(){
       if(sel){x.strokeStyle='#ffd54a';x.lineWidth=5;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
       if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
     });
+    menuTex.needsUpdate=true;return;
+  }
+  if(menuPage==='hp'){
+    x.textAlign='center';
+    const HL={hp_up:'Up',hp_down:'Down',hp_left:'Left',hp_right:'Right',hp_reset:'Reset',hpback:'< Back'};
+    menuBtns().forEach((b,i)=>{
+      x.fillStyle=b.id==='hpback'?'#555':b.id==='hp_reset'?'#0f9d8a':'#db2777';rr(b.x,b.y,b.w,b.h,12);x.fill();
+      if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
+      x.fillStyle='#fff';x.font='21px WebTag, sans-serif';x.fillText(HL[b.id],b.x+b.w/2,b.y+b.h/2+7,b.w-16);
+    });
+    x.fillStyle='#ffd54a';x.font='16px WebTag, sans-serif';
+    x.fillText('Up/down: '+headphoneOffset.y.toFixed(2)+'   Left/right: '+headphoneOffset.x.toFixed(2),MW/2,420,MW-20);
+    x.fillStyle='#aaa';x.font='15px WebTag, sans-serif';x.fillText('Check yourself in the mirror',MW/2,445,MW-20);
     menuTex.needsUpdate=true;return;
   }
   if(menuPage==='names'){
@@ -1353,7 +1370,7 @@ function drawMenu(){
     if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
     x.fillStyle=fg;x.font='19px WebTag, sans-serif';x.fillText(txt,b.x+b.w/2,b.y+b.h/2+6,b.w-16);
   });
-  x.fillStyle='#888';x.font='12px sans-serif';x.textAlign='center';x.fillText('build: long-arms-1',MW/2,MH-5);
+  x.fillStyle='#888';x.font='12px sans-serif';x.textAlign='center';x.fillText('build: hp-menu-1',MW/2,MH-5);
   menuTex.needsUpdate=true;
 }
 const ctrls=[0,1].map(i=>renderer.xr.getController(i));
@@ -1388,6 +1405,13 @@ function menuClick(id){
   else if(id==='mc_map'){mocap.map=!mocap.map;try{localStorage.setItem('monkeMocapMap',mocap.map?'1':'0')}catch(e){}}
   else if(id==='mc_pl'){mocap.players=!mocap.players;try{localStorage.setItem('monkeMocapPlayers',mocap.players?'1':'0')}catch(e){}}
   else if(id==='back'){menuPage='main';menuHover=-1;menuDrawKey=''}
+  else if(id==='hppage'){menuPage='hp';menuHover=-1;menuDrawKey=''}
+  else if(id==='hpback'){menuPage='cos';menuHover=-1;menuDrawKey=''}
+  else if(id==='hp_reset'){headphoneOffset={...HEADPHONE_DEFAULT};applyHeadphoneOffset()}
+  else if(id.startsWith('hp_')){const S=0.01,cl=v=>Math.max(-0.35,Math.min(0.65,v));
+    if(id==='hp_up')headphoneOffset.y=cl(headphoneOffset.y+S);else if(id==='hp_down')headphoneOffset.y=cl(headphoneOffset.y-S);
+    else if(id==='hp_left')headphoneOffset.x=cl(headphoneOffset.x+S);else if(id==='hp_right')headphoneOffset.x=cl(headphoneOffset.x-S);
+    applyHeadphoneOffset()}
   else if(id.startsWith('hat:')){cos.hat=+id.slice(4);wearHat()}
   else if(id.startsWith('col:')){cos.col=+id.slice(4);wearHat()}
   else if(id.startsWith('fur:')){cos.fur=FURS[+id.slice(4)];wearHat()}
