@@ -1549,7 +1549,7 @@ try{
   const root=gl.scene;cm.add(root);
   const need=n=>{const o=root.getObjectByName(n);if(!o)throw new Error('camera model is missing node '+n);return o};
   const body=need('Body'),screen=need('Screen');info=need('InfoBar');
-  previewScreen=screen;previewBaseScale=screen.scale.clone();setCameraOrientation();
+  previewScreen=screen;previewBaseScale=screen.scale.clone();
   // live screen: the model's screen quad shows the camera's own render
   screen.material.dispose();screen.material=new THREE.MeshBasicMaterial({map:tex,fog:false});
   // live info bar (mode / FOV / REC text)
@@ -1647,6 +1647,8 @@ camBring=()=>{rig.updateMatrixWorld(true);headPose();placeCam()};
 
 /* ---- camera view / photo / record ---- */
 const c2=new THREE.PerspectiveCamera(70,16/9,XR_DEPTH_NEAR,500),qFlip=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),Math.PI);
+// Apply the initial preview size only after c2 exists; calling this earlier aborts camera setup.
+setCameraOrientation();
 const _fpO=V(),_fpE=new THREE.Euler();
 function renderCam(){
   let hideHead=false;
