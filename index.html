@@ -464,6 +464,7 @@ function setFur(g,v){g.fur=v;if(v>=0&&!g.tg)g.furMats.forEach((m,i)=>furCol(g,i,
 function rainbow(g,t){g.furMats.forEach(m=>m.color.setHSL((t*0.12)%1,0.85,0.55))}
 function furTick(t){const f=g=>{if(g.tg)redTick(g,t);else if(g.fur===-1)rainbow(g,t)};f(P.g);remotes.forEach(r=>f(r.g))}
 const cos={hat:0,col:0,fur:FUR_ORIG};let net=null;
+let stickOn=false;try{stickOn=localStorage.getItem('monkeStick')==='1'}catch(e){}
 try{const sv=JSON.parse(localStorage.getItem('monkeCos')||'{}');if(sv.hat>=0&&sv.hat<hatDefs.length)cos.hat=sv.hat|0;if(sv.col>=0&&sv.col<COLS.length)cos.col=sv.col|0;if(typeof sv.fur==='number')cos.fur=(sv.fur===0xffffff&&!sv.fv2)?FUR_ORIG:sv.fur;cos.fv2=1}catch(e){}
 const cosEl=document.createElement('div');cosEl.id='cos';
 cosEl.innerHTML='<b>Wardrobe</b><div id="hl"></div><div id="cl"></div><b>Fur color</b><div id="fl"></div><small>Check yourself in the mirror!<br>Click outside this box to play.</small>';
@@ -486,7 +487,6 @@ const cycleFur=()=>{cos.fur=FURS[(FURS.indexOf(cos.fur)+1)%FURS.length];wearHat(
 const cycleHat=d=>{cos.hat=(cos.hat+d+hatDefs.length)%hatDefs.length;wearHat()},cycleCol=d=>{cos.col=(cos.col+d+COLS.length)%COLS.length;wearHat()};
 wearHat();
 // ---------- Secret Stick: a wooden stick in the RIGHT hand. Off by default; each player enables it in the menu and everyone sees it on them. ----------
-let stickOn=false;try{stickOn=localStorage.getItem('monkeStick')==='1'}catch(e){}
 function makeStick(){
   const g=new THREE.Group(),wood=MT(0x8b5a2b,0.85),dark=MT(0x4a2e14,0.9),grip=MT(0x222222,0.95);
   // built along +Y (the wrist bone's forward axis), in gorilla-local units
