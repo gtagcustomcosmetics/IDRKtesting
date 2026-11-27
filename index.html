@@ -771,10 +771,10 @@ function handHit(k,speed){if(P.ht[k])return;P.ht[k]=true;const n=performance.now
 function landSfx(v){const n=performance.now();if(n-lastLand<250)return;lastLand=n;sfxThump(Math.min(1,v/12),0.6)}
 function whooshSfx(speed){const n=performance.now();if(speed<3.5||n-lastWhoosh<200)return;lastWhoosh=n;sfxWhoosh(Math.min(1,speed/10))}
 
-// ---------- game modes: host chooses Casual or Tag. 2-3 players: infection tag; 4 players: last one standing ----------
+// ---------- game modes: host chooses Casual or Tag. 1-3 players: classic tag; 4 players: infection tag ----------
 const TAG_DIST=1.3,HAND_TAG=0.65,HEAD_START=5000,OVER_TIME=6000;
 const game={ls:false,mode:'free',phase:'wait',tagged:new Set(),eliminated:new Set(),winner:null,msg:'',hsEnd:0,overAt:0,syncT:0};
-const lastStanding=()=>game.ls; // fixed when the round starts, so players leaving can't flip the rules mid-round
+const infectionMode=()=>game.ls; // fixed when the round starts, so lobby changes only affect the next round
 const myId=()=>net&&net.peer?net.peer.id:null,isHost=()=>!!(net&&net.host);
 const allIds=()=>{const a=[];if(myId())a.push(myId());remotes.forEach((r,id)=>a.push(id));return a};
 function gameState(extra){return Object.assign({t:'g',ls:game.ls,mode:game.mode,phase:game.phase,tagged:[...game.tagged],eliminated:[...game.eliminated],winner:game.winner,msg:game.msg,hs:Math.max(0,game.hsEnd-performance.now())},extra||{})}
@@ -795,7 +795,7 @@ function gameEvent(ev,v){
 function startRound(){
   const ids=allIds();
   if(ids.length<2){game.phase='wait';game.tagged.clear();game.msg='';sendGame();return}
-  game.ls=ids.length>=4;game.tagged=new Set([ids[Math.floor(Math.random()*ids.length)]]);game.eliminated.clear();game.winner=null;game.phase='play';game.hsEnd=performance.now()+HEAD_START;
+  game.ls=ids.length===4;game.tagged=new Set([ids[Math.floor(Math.random()*ids.length)]]);game.eliminated.clear();game.winner=null;game.phase='play';game.hsEnd=performance.now()+HEAD_START;
   sendGame({ev:'start'});
 }
 function hostSetMode(m){
@@ -812,22 +812,28 @@ function hostTick(dt){
   if(game.mode!=='tag')return;
   const ids=allIds(),now=performance.now();
   [...game.tagged].forEach(id=>{if(!ids.includes(id))game.tagged.delete(id)});
-  [...game.eliminated].forEach(id=>{if(!ids.includes(id))game.eliminated.delete(id)}); // players who left no longer count as eliminated
+  [...game.eliminated].forEach(id=>{if(!ids.includes(id))game.eliminated.delete(id)});
   if(game.phase==='wait'){if(ids.length>=2)startRound();return}
   if(game.phase==='over'){if(now>game.overAt)startRound();return}
   if(ids.length<2){game.phase='wait';game.tagged.clear();game.eliminated.clear();game.winner=null;sendGame();return}
   if(game.tagged.size===0){startRound();return}
-  if(now<game.hsEnd)return;   // the first tagged player gets a short head start
-  const pl=playersInfo(),survivors=pl.filter(p=>!game.eliminated.has(p.id));
-  // With four players, a tagged player is out. With three or fewer, tag spreads like infection.
-  for(const a of survivors)if(game.tagged.has(a.id)&&(!lastStanding()||!game.eliminated.has(a.id)))for(const b of survivors){
-    if(a.id===b.id||game.tagged.has(b.id)||game.eliminated.has(b.id))continue;
+  if(now<game.hsEnd)return;   // initial head start and brief tag cooldown
+  const pl=playersInfo();
+  // Four-player rounds are infection: tagged players stay tagged.
+  // With 1-3 players, classic tag transfers IT to the person who was tagged.
+  for(const a of pl)if(game.tagged.has(a.id))for(const b of pl){
+    if(a.id===b.id||game.tagged.has(b.id))continue;
     if(a.pos.distanceTo(b.pos)<TAG_DIST||a.hands.some(h=>h.distanceTo(b.pos)<HAND_TAG)){
-      if(lastStanding())game.eliminated.add(b.id);else game.tagged.add(b.id);
+      if(infectionMode())game.tagged.add(b.id);
+      else{game.tagged.delete(a.id);game.tagged.add(b.id)}
+      game.hsEnd=now+(infectionMode()?0:700); // prevent instant tag-backs in classic tag
       sendGame({ev:'tag',v:b.id});
-      if(lastStanding()&&ids.length-game.eliminated.size<=1){game.winner=pl.find(p=>!game.eliminated.has(p.id))?.id||a.id;game.phase='over';game.msg='Last one standing wins!';game.overAt=now+OVER_TIME;sendGame({ev:'over'})}
-      else if(!lastStanding()&&game.tagged.size>=ids.length){game.msg='Everyone is tagged! Keep playing';sendGame()}
-      return}}
+      if(infectionMode()&&game.tagged.size>=ids.length){
+        game.winner=null;game.phase='over';game.msg='Everyone is tagged!';game.overAt=now+OVER_TIME;sendGame({ev:'over'});
+      }
+      return;
+    }
+  }
 }
 // tagged look: pulsing shades of red (same idea as the rainbow fur, but red)
 function redTick(g,t){g.furMats.forEach((m,i)=>{const w=0.5+0.5*Math.sin(t*3+i*0.8);m.color.setHSL(0.005+0.015*w,0.9,0.22+0.3*w)})}
@@ -855,10 +861,9 @@ function hudText(){
   if(game.mode!=='tag')return '';
   const me=myId(),tg=game.tagged.has(me),left=allIds().length-game.tagged.size-game.eliminated.size;
   if(game.phase==='wait')return 'TAG: waiting for more players...';
-  if(game.phase==='over')return lastStanding()?'LAST ONE STANDING! New round soon...':'Everyone is tagged! New round soon...';
-  if(lastStanding()&&game.eliminated.has(me))return 'YOU ARE OUT! Watch the last players';
-  if(tg)return game.hsEnd>performance.now()?"YOU'RE IT! Get a head start...":(lastStanding()?"YOU'RE IT! Tag the others!":"YOU'RE IT! Tag everyone!");
-  return lastStanding()?'RUN! Last one standing wins ('+left+' safe)':'RUN! Stay untagged ('+left+' left)';
+  if(game.phase==='over')return infectionMode()?'Everyone is tagged! New round soon...':'New round starting soon...';
+  if(tg)return game.hsEnd>performance.now()?"YOU'RE IT! Get ready...":(infectionMode()?"YOU'RE IT! Tag everyone!":"YOU'RE IT! Tag someone!");
+  return infectionMode()?'RUN! Stay untagged ('+left+' left)':"RUN! Avoid the player who is IT!";
 }
 function hudTick(){
   const tx=hudText(),tg=game.mode==='tag'&&game.phase==='play'&&game.tagged.has(myId());
@@ -872,7 +877,7 @@ function hudTick(){
 function gameTick(dt){if(net&&net.host)hostTick(dt);applyLooks();hudTick()}
 // host-only mode picker (desktop panel)
 const gmSel=$('gm');
-function refreshGM(){gmSel.value=game.mode;gmSel.disabled=!isHost();$('gmnote').textContent=isHost()?'Host controls: Casual or Tag. Tag uses infection with 2-3 players and last-one-standing with 4.':'Only the host can change the game mode.'}
+function refreshGM(){gmSel.value=game.mode;gmSel.disabled=!isHost();$('gmnote').textContent=isHost()?'Host controls: Casual or Tag. Tag uses classic tag with 1-3 players and infection tag with 4.':'Only the host can change the game mode.'}
 gmSel.addEventListener('change',()=>{if(isHost())hostSetMode(gmSel.value);else refreshGM()});
 setInterval(refreshGM,700);refreshGM();
 
