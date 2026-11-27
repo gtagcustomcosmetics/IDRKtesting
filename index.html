@@ -429,9 +429,8 @@ const hatDefs=[
    g.add(t,at(cyl(.14,.14,.045,MT(0xffffff)),0,.01,0));return g}],
  ['Cat Ears',m=>{const g=new THREE.Group();for(const sx of[-1,1]){const e=at(new THREE.Mesh(new THREE.ConeGeometry(.05,.11,4),m),sx*.09,.04,0);e.rotation.z=-sx*.25;
    const i=at(new THREE.Mesh(new THREE.ConeGeometry(.028,.07,4),MT(0xffb3c6)),sx*.09,.035,.012);i.rotation.z=-sx*.25;g.add(e,i)}return g}], ['Headphones',m=>{const g=new THREE.Group();
-    // Lower the headset so the band rests on the top of the head instead of floating.
-    // Move the cups slightly outward so they sit over the ears rather than inside the head.
-    g.position.y=-.25;
+    // Headphone height is controlled by the attachment offset in setHat().
+    // Keep the cups slightly outward so they sit over the ears rather than inside the head.
     const band=new THREE.Mesh(new THREE.TorusGeometry(.17,.018,8,32,Math.PI),MT(0x222831));
     band.position.y=.025;g.add(band);
     for(const sx of[-1,1]){
@@ -444,7 +443,7 @@ const hatDefs=[
 ];
 function setHat(g,hi,ci){
   if(g.hatObj){g.rig.head.remove(g.hatObj);g.hatObj=null;g.spin=null}
-  if(hatDefs[hi]&&hatDefs[hi][1]){g.hatObj=hatDefs[hi][1](MT(COLS[ci]));g.spin=g.hatObj.userData.spin||null;at(g.hatObj,0,0.285,0.03);g.rig.head.add(g.hatObj)}
+  if(hatDefs[hi]&&hatDefs[hi][1]){g.hatObj=hatDefs[hi][1](MT(COLS[ci]));g.spin=g.hatObj.userData.spin||null;at(g.hatObj,0,hi===10?0.12:0.285,0.03);g.rig.head.add(g.hatObj)}
 }
 // FUR_ORIG (the default swatch) = the model's own lime green; any other swatch (white included) replaces it
 const FUR_ORIG=0x30e636;
