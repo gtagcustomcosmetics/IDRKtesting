@@ -522,9 +522,36 @@ function setStick(g,on){
   if(g.stickObj){if(g.stickObj.parent)g.stickObj.parent.remove(g.stickObj);g.stickObj=null}
   if(!on)return;
   const o=makeStick(),ws=g.rig.ws[1];
-  o.scale.set(1/ws.x,1/ws.y,1/ws.z); // cancel the wrist bone's world scale so the stick keeps a fixed size in the gorilla's units
-  o.position.set(0,0.06/ws.y,0);
+  o.userData.ws=ws.clone();
   g.rig.wrist[1].add(o);g.stickObj=o;
+  stickApply(g);
+}
+// ---- stick debug adjust (your own stick only): scale, position offset (gorilla units) and rotation (degrees), saved on this device ----
+const STICK_ADJ0={s:1,x:0,y:0,z:0,rx:0,ry:0,rz:0};
+let stickAdj={...STICK_ADJ0};
+try{const sv=JSON.parse(localStorage.getItem('monkeStickAdj')||'{}');for(const k in STICK_ADJ0)if(typeof sv[k]==='number'&&isFinite(sv[k]))stickAdj[k]=sv[k]}catch(e){}
+let stickMsg='';
+function stickApply(g){
+  const o=g&&g.stickObj;if(!o)return;const ws=o.userData.ws,a=g===P.g?stickAdj:STICK_ADJ0;
+  // 1/ws cancels the wrist bone's world scale so the stick keeps a fixed size in the gorilla's units
+  o.scale.set(a.s/ws.x,a.s/ws.y,a.s/ws.z);
+  o.position.set(a.x/ws.x,(0.06+a.y)/ws.y,a.z/ws.z);
+  o.rotation.set(a.rx*PI/180,a.ry*PI/180,a.rz*PI/180);
+}
+const STICK_ROWS=[['s','Scale'],['x','Move X'],['y','Move Y'],['z','Move Z'],['rx','Rotate X'],['ry','Rotate Y'],['rz','Rotate Z']];
+function stickAdjSave(){try{localStorage.setItem('monkeStickAdj',JSON.stringify(stickAdj))}catch(e){}}
+function stickAdjust(k,dir){
+  if(k==='s')stickAdj.s=Math.max(0.05,Math.min(20,stickAdj.s*Math.pow(1.1,dir)));
+  else if(k[0]==='r')stickAdj[k]=((stickAdj[k]+5*dir+180)%360+360)%360-180;
+  else stickAdj[k]=Math.round((stickAdj[k]+0.02*dir)*1000)/1000;
+  stickAdjSave();stickApply(P.g);
+}
+function stickAdjText(k){const v=stickAdj[k];return k==='s'?'x'+v.toFixed(2):k[0]==='r'?Math.round(v)+'\u00b0':(v>=0?'+':'')+v.toFixed(2)}
+function stickAdjReset(){stickAdj={...STICK_ADJ0};stickAdjSave();stickApply(P.g);stickMsg='Reset'}
+function stickAdjCopy(){
+  const t='const STICK_ADJ='+JSON.stringify(stickAdj);console.log(t);
+  try{navigator.clipboard.writeText(t).then(()=>{stickMsg='Copied (also in console)'},()=>{stickMsg='Printed to console'})}catch(e){stickMsg='Printed to console'}
+  stickMsg='Printed to console';
 }
 function toggleStick(){stickOn=!stickOn;try{localStorage.setItem('monkeStick',stickOn?'1':'0')}catch(e){}setStick(P.g,stickOn);netSend({t:'c',hat:cos.hat,col:cos.col,fur:cos.fur,stick:stickOn})}
 setStick(P.g,stickOn);
@@ -1271,8 +1298,8 @@ function mocapExport(){
   }catch(e){console.error(e);if(lvl<1){run(lvl+1);return}mocap.busy=false;mocapSay('Export failed: '+String(e.message).slice(0,40))}},30);
   run(0);
 }
-const menuIds=['mic','hear','sfx','turn','mode','cam','cos','names','mocap','stick','close'];
-const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:58+i*45,w:432,h:40}));
+const menuIds=['mic','hear','sfx','turn','mode','cam','cos','names','mocap','stick','stkadj','close'];
+const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:58+i*43,w:432,h:38}));
 // cosmetics page: hat thumbnails (5 per row), hat colors, fur colors, back button
 const COS_BTNS=[];
 hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%6)*80,y:84+Math.floor(i/6)*80,w:72,h:72}));
@@ -1281,7 +1308,9 @@ FURS.forEach((v,i)=>COS_BTNS.push({id:'fur:'+i,x:25+i*34,y:378,w:30,h:30}));
 COS_BTNS.push({id:'back',x:40,y:476,w:432,h:44});
 const MOCAP_BTNS=[{id:'mc_rec',x:40,y:84,w:432,h:56},{id:'mc_exp',x:40,y:148,w:432,h:56},{id:'mc_clr',x:40,y:212,w:432,h:56},{id:'mc_map',x:40,y:276,w:432,h:56},{id:'mc_pl',x:40,y:340,w:432,h:56},{id:'back',x:40,y:408,w:432,h:44}];
 const NAMES_BTNS=[{id:'nm_name',x:40,y:84,w:432,h:56},{id:'nm_code',x:40,y:148,w:432,h:56},{id:'nm_pub',x:40,y:212,w:432,h:56},{id:'back',x:40,y:276,w:432,h:44}];
-let menuPage='main';const menuBtns=()=>menuPage==='cos'?COS_BTNS:menuPage==='mocap'?MOCAP_BTNS:menuPage==='names'?NAMES_BTNS:MAIN_BTNS;
+const STK_BTNS=[];STICK_ROWS.forEach(([k],i)=>{STK_BTNS.push({id:'sa-:'+k,x:262,y:72+i*44,w:100,h:38},{id:'sa+:'+k,x:372,y:72+i*44,w:100,h:38})});
+STK_BTNS.push({id:'sa_reset',x:40,y:388,w:210,h:44},{id:'sa_copy',x:262,y:388,w:210,h:44},{id:'back',x:40,y:444,w:432,h:44});
+let menuPage='main';const menuBtns=()=>menuPage==='stk'?STK_BTNS:menuPage==='cos'?COS_BTNS:menuPage==='mocap'?MOCAP_BTNS:menuPage==='names'?NAMES_BTNS:MAIN_BTNS;
 let menuHover=-1,menuDrawKey='',menuOpen=false,mPrevReq=false,mArm=false;const mPrevTrig=[false,false];
 function rr(x,y,w,h,r){menuCx.beginPath();menuCx.moveTo(x+r,y);menuCx.arcTo(x+w,y,x+w,y+h,r);menuCx.arcTo(x+w,y+h,x,y+h,r);menuCx.arcTo(x,y+h,x,y,r);menuCx.arcTo(x,y,x+w,y,r);menuCx.closePath()}
 // little pictures of each hat for the cosmetics page (drawn once per hat+color by a tiny separate renderer)
@@ -1308,11 +1337,11 @@ function hatThumb(hi,ci){
   return c;
 }
 function drawMenu(){
-  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost()+'|'+mocap.rec+'|'+(mocap.times.length>>4)+'|'+mocap.busy+'|'+mocap.msg+'|'+mocap.map+'|'+mocap.players+'|'+myName()+'|'+roomCode+'|'+headphoneOffset.x+'|'+headphoneOffset.y+'|'+stickOn;
+  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost()+'|'+mocap.rec+'|'+(mocap.times.length>>4)+'|'+mocap.busy+'|'+mocap.msg+'|'+mocap.map+'|'+mocap.players+'|'+myName()+'|'+roomCode+'|'+headphoneOffset.x+'|'+headphoneOffset.y+'|'+stickOn+'|'+JSON.stringify(stickAdj)+'|'+stickMsg;
   if(key===menuDrawKey)return;menuDrawKey=key;
   const x=menuCx;x.clearRect(0,0,MW,MH);
   x.fillStyle='rgba(0,0,0,.88)';rr(0,0,MW,MH,28);x.fill();
-  x.fillStyle='#fff';x.font='30px WebTag, sans-serif';x.textAlign='center';x.fillText(menuPage==='cos'?'COSMETICS':menuPage==='mocap'?'MOCAP':menuPage==='names'?'NAMES AND CODES':'MENU',MW/2,43);
+  x.fillStyle='#fff';x.font='30px WebTag, sans-serif';x.textAlign='center';x.fillText(menuPage==='stk'?'STICK ADJUST':menuPage==='cos'?'COSMETICS':menuPage==='mocap'?'MOCAP':menuPage==='names'?'NAMES AND CODES':'MENU',MW/2,43);
   if(menuPage==='cos'){
     const hb=menuBtns()[menuHover],hovHat=hb&&hb.id.startsWith('hat:')?+hb.id.slice(4):cos.hat;
     x.fillStyle='#ccc';x.font='18px WebTag, sans-serif';x.textAlign='left';
@@ -1339,6 +1368,22 @@ function drawMenu(){
       if(sel){x.strokeStyle='#ffd54a';x.lineWidth=5;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
       if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
     });
+    menuTex.needsUpdate=true;return;
+  }
+  if(menuPage==='stk'){
+    x.textAlign='left';x.fillStyle='#fff';x.font='20px WebTag, sans-serif';
+    STICK_ROWS.forEach(([k,lbl],i)=>{x.fillText(lbl+'  '+stickAdjText(k),40,72+i*44+26,215)});
+    x.textAlign='center';
+    menuBtns().forEach((b,i)=>{
+      let col='#555',txt='< Back';
+      if(b.id[0]==='s'&&b.id[1]==='a'&&b.id.indexOf(':')>0){col='#3b82f6';txt=b.id[2]==='-'?'-':'+'}
+      else if(b.id==='sa_reset'){col='#d9534f';txt='Reset'}
+      else if(b.id==='sa_copy'){col='#0ea5a4';txt='Print values'}
+      x.fillStyle=col;rr(b.x,b.y,b.w,b.h,12);x.fill();
+      if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
+      x.fillStyle='#fff';x.font='22px WebTag, sans-serif';x.fillText(txt,b.x+b.w/2,b.y+b.h/2+7,b.w-16);
+    });
+    x.fillStyle='#ffd54a';x.font='16px WebTag, sans-serif';x.fillText(stickMsg||'Stick must be ON to see changes',MW/2,520,MW-40);
     menuTex.needsUpdate=true;return;
   }
   if(menuPage==='names'){
@@ -1385,6 +1430,7 @@ function drawMenu(){
     else if(b.id==='cos'){col='#db2777';txt='Cosmetics  >'}
     else if(b.id==='names'){col='#7c3aed';txt='Names and codes  >'}
     else if(b.id==='stick'){col=stickOn?'#3ecf6a':'#d9534f';fg=stickOn?'#000':'#fff';txt='Secret Stick: '+(stickOn?'ON':'OFF')}
+    else if(b.id==='stkadj'){col='#2563eb';txt='Stick adjust  >'}
     else if(b.id==='mocap'){col=mocap.rec?'#d9534f':'#0ea5a4';txt=mocap.rec?'Mocap: REC '+mocapSecs()+'s  >':'Mocap  >'}
     x.fillStyle=col;rr(b.x,b.y,b.w,b.h,12);x.fill();
     if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
@@ -1414,6 +1460,10 @@ function menuClick(id){
   else if(id==='mode'){if(isHost())hostSetMode(game.mode==='tag'?'free':'tag')}
   else if(id==='cam'){camBring();setMenu(false)}
   else if(id==='stick')toggleStick();
+  else if(id==='stkadj'){menuPage='stk';menuHover=-1;menuDrawKey='';stickMsg=''}
+  else if(id[0]==='s'&&id[1]==='a'&&id.indexOf(':')>0){stickAdjust(id.slice(id.indexOf(':')+1),id[2]==='-'?-1:1)}
+  else if(id==='sa_reset')stickAdjReset();
+  else if(id==='sa_copy')stickAdjCopy();
   else if(id==='cos'){menuPage='cos';menuHover=-1;menuDrawKey=''}
   else if(id==='mocap'){menuPage='mocap';menuHover=-1;menuDrawKey=''}
   else if(id==='names'){menuPage='names';menuHover=-1;menuDrawKey=''}
@@ -1756,11 +1806,11 @@ const title=document.createElement('div');title.id='pmtitle';pm.appendChild(titl
 const pages={},upds=[];
 const mk=n=>{const d=document.createElement('div');pages[n]=d;pm.appendChild(d);return d};
 const refresh=()=>upds.forEach(u=>u());
-const show=n=>{Object.entries(pages).forEach(([k,d])=>d.style.display=k===n?'block':'none');title.textContent={main:'MENU',cos:'COSMETICS',names:'NAMES AND CODES',mocap:'MOCAP'}[n];if(n==='names'){const t=document.getElementById('tabNames');if(t)t.click()}refresh()};
+const show=n=>{Object.entries(pages).forEach(([k,d])=>d.style.display=k===n?'block':'none');title.textContent={main:'MENU',cos:'COSMETICS',names:'NAMES AND CODES',mocap:'MOCAP',stk:'STICK ADJUST'}[n];if(n==='names'){const t=document.getElementById('tabNames');if(t)t.click()}refresh()};
 const btn=(pg,fn,upd)=>{const b=document.createElement('button');b.className='pmb';b.onclick=()=>{fn();refresh()};pg.appendChild(b);upds.push(()=>{const r=upd();b.textContent=r[0];b.style.background=r[1];b.style.color=r[2]||'#fff';b.style.opacity=r[3]?.45:1});return b};
 const onoff=(v,t,x)=>[t+': '+(v?'ON':'OFF')+(x||''),v?'#3ecf6a':'#d9534f',v?'#000':'#fff'];
 const resume=()=>renderer.domElement.requestPointerLock();
-const main=mk('main'),cp=mk('cos'),np=mk('names'),mp=mk('mocap');
+const main=mk('main'),cp=mk('cos'),np=mk('names'),mp=mk('mocap'),sp=mk('stk');
 const back=pg=>btn(pg,()=>show('main'),()=>['< Back','#555']);
 btn(main,()=>setMic(!micOn),()=>onoff(micOn,'Mic',micOn&&micOK===false?' (no mic)':''));
 btn(main,()=>setHear(!hearOn),()=>onoff(hearOn,'Hear others'));
@@ -1768,6 +1818,7 @@ btn(main,()=>{setSfx(!sfxOn);if(sfxOn)sfxClick()},()=>onoff(sfxOn,'Sounds'));
 btn(main,()=>{if(isHost())hostSetMode(game.mode==='tag'?'free':'tag')},()=>['Game mode: '+(game.mode==='tag'?'TAG':'CASUAL')+(isHost()?'':' (host only)'),isHost()?'#b45309':'#444']);
 btn(main,()=>{camBring();resume()},()=>['Bring camera to me','#8b5cf6']);
 btn(main,()=>toggleStick(),()=>onoff(stickOn,'Secret Stick'));
+btn(main,()=>{stickMsg='';show('stk')},()=>['Stick adjust  >','#2563eb']);
 btn(main,()=>show('cos'),()=>['Cosmetics  >','#db2777']);
 btn(main,()=>show('names'),()=>['Names and codes  >','#7c3aed']);
 btn(main,()=>show('mocap'),()=>[mocap.rec?'Mocap: REC '+mocapSecs()+'s  >':'Mocap  >',mocap.rec?'#d9534f':'#0ea5a4']);
@@ -1778,6 +1829,17 @@ back(cp);cp.appendChild(cosEl);
 back(np);np.appendChild(mpEl);
 {const mt=mpEl.querySelector('#mptabs');if(mt)mt.style.display='none';const pl=mpEl.querySelector('#paneLobby');if(pl)pl.style.display='none';const pn=mpEl.querySelector('#paneNames');if(pn)pn.style.display='block'} // PC page: show name + private code directly, no inner tabs
 back(mp);
+back(sp);
+STICK_ROWS.forEach(([k,lbl])=>{
+  const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:8px;margin:7px 0';
+  const t=document.createElement('div');t.style.cssText='flex:1;text-align:left;color:#fff;font:19px WebTag,sans-serif';
+  const mkb=(txt,d)=>{const b=document.createElement('button');b.className='pmb';b.style.cssText+='width:64px;margin:0;padding:8px';b.textContent=txt;
+    b.onclick=()=>{stickAdjust(k,d);refresh()};return b};
+  row.append(t,mkb('-',-1),mkb('+',1));sp.appendChild(row);upds.push(()=>{t.textContent=lbl+'  '+stickAdjText(k)});
+});
+btn(sp,()=>stickAdjReset(),()=>['Reset','#d9534f']);
+btn(sp,()=>stickAdjCopy(),()=>['Print values (console + clipboard)','#0ea5a4']);
+const stkNote=document.createElement('div');stkNote.className='pmmsg';sp.appendChild(stkNote);upds.push(()=>{stkNote.textContent=stickMsg||(stickOn?'':'Turn the stick ON to see changes')});
 btn(mp,()=>{mocapToggle();if(mocap.rec)resume()},()=>[mocap.rec?'Stop  ('+mocapSecs()+'s)':'Record',mocap.rec?'#d9534f':'#c0392b']);
 btn(mp,()=>mocapExport(),()=>{const n=mocap.times.length;return ['Export GLB'+(n?'  ('+n+' frames)':''),'#8b5cf6','#fff',n<2||mocap.busy]});
 btn(mp,()=>mocapClear(),()=>{const n=mocap.times.length;return ['Clear take','#0f9d8a','#fff',!n&&!mocap.rec]});
