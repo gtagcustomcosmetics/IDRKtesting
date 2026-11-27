@@ -443,8 +443,8 @@ const hatDefs=[
     return g}]
 ];
 // Headphone placement is adjustable per player on this device. Other hats keep their original attachment.
-const HEADPHONE_DEFAULT={x:-0.01,y:0.19,z:0.03};
-let headphoneOffset={...HEADPHONE_DEFAULT};
+const HEADPHONE_DEFAULT={x:0,y:0.285,z:0.03};
+let headphoneOffset={x:-0.01,y:0.19,z:0.03};
 function setHat(g,hi,ci){
   if(g.hatObj){g.rig.head.remove(g.hatObj);g.hatObj=null;g.spin=null}
   if(hatDefs[hi]&&hatDefs[hi][1]){
