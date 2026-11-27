@@ -93,6 +93,10 @@ try{
   throw e;
 }
 
+// stick.fbx (optional: if it is missing the game falls back to a simple built-in stick)
+let stickFbx=null;
+try{stickFbx=await new FBXLoader().loadAsync('stick.fbx')}catch(e){console.warn('stick.fbx did not load, using the built-in stick instead',e)}
+
 // ---------- map collider: real triangle collision for the map mesh ----------
 // The old physics only asked "how high is the floor under me?" with one ray pointing down, so walking sideways into a
 // stump/tree did nothing until the ray happened to land on top of it (pop up) or start inside it (sink through).
@@ -487,7 +491,22 @@ const cycleFur=()=>{cos.fur=FURS[(FURS.indexOf(cos.fur)+1)%FURS.length];wearHat(
 const cycleHat=d=>{cos.hat=(cos.hat+d+hatDefs.length)%hatDefs.length;wearHat()},cycleCol=d=>{cos.col=(cos.col+d+COLS.length)%COLS.length;wearHat()};
 wearHat();
 // ---------- Secret Stick: a wooden stick in the RIGHT hand. Off by default; each player enables it in the menu and everyone sees it on them. ----------
+const STICK_LEN=1.0; // how long the stick is in gorilla units (the model is auto-scaled to this)
+function makeStickFromFbx(){
+  const src=clone(stickFbx),box=new THREE.Box3().setFromObject(src),sz=box.getSize(V()),holder=new THREE.Group();
+  holder.add(src);
+  // stand the longest axis up along +Y (the direction the hand points)
+  if(sz.x>=sz.y&&sz.x>=sz.z)holder.rotation.z=PI/2;else if(sz.z>=sz.y&&sz.z>=sz.x)holder.rotation.x=-PI/2;
+  const g=new THREE.Group();g.add(holder);g.updateMatrixWorld(true);
+  const b2=new THREE.Box3().setFromObject(g),len=Math.max(b2.max.y-b2.min.y,1e-6),c=b2.getCenter(V());
+  const f=STICK_LEN/len;g.scale.setScalar(f);
+  const w=new THREE.Group();w.add(g);
+  g.position.set(-c.x*f,-b2.min.y*f-0.22,-c.z*f); // bottom end sits just behind the fist, the rest sticks out forward
+  w.traverse(o=>{if(o.isMesh){o.frustumCulled=false;if(o.material&&Array.isArray(o.material))o.material=o.material.map(m=>m.clone());else if(o.material)o.material=o.material.clone()}});
+  return w;
+}
 function makeStick(){
+  if(stickFbx){try{return makeStickFromFbx()}catch(e){console.warn('stick.fbx setup failed, using built-in stick',e)}}
   const g=new THREE.Group(),wood=MT(0x8b5a2b,0.85),dark=MT(0x4a2e14,0.9),grip=MT(0x222222,0.95);
   // built along +Y (the wrist bone's forward axis), in gorilla-local units
   const shaft=cyl(.017,.021,1.0,wood,12);shaft.position.y=0.3;
