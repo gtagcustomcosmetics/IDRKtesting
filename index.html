@@ -476,7 +476,7 @@ FURS.forEach(v=>{const d=document.createElement('span');d.className='sw';d.datas
 const fp=document.createElement('input');fp.type='color';fp.value='#ff8800';fp.title='Custom fur color';fp.style.cssText='width:30px;height:26px;border:0;padding:0;vertical-align:middle;background:none';
 fp.oninput=()=>{cos.fur=parseInt(fp.value.slice(1),16);wearHat()};$('fl').appendChild(fp);
 function wearHat(){
-  setHat(P.g,cos.hat,cos.col);setFur(P.g,cos.fur);netSend({t:'c',hat:cos.hat,col:cos.col,fur:cos.fur});
+  setHat(P.g,cos.hat,cos.col);setFur(P.g,cos.fur);netSend({t:'c',hat:cos.hat,col:cos.col,fur:cos.fur,stick:stickOn});
   [...$('hl').children].forEach((b,i)=>b.classList.toggle('on',i===cos.hat));
   [...$('cl').children].forEach((d,i)=>d.classList.toggle('on',i===cos.col));
   [...$('fl').children].forEach(d=>{if(d.dataset.v!==undefined)d.classList.toggle('on',+d.dataset.v===cos.fur)});
@@ -485,6 +485,30 @@ function wearHat(){
 const cycleFur=()=>{cos.fur=FURS[(FURS.indexOf(cos.fur)+1)%FURS.length];wearHat()};
 const cycleHat=d=>{cos.hat=(cos.hat+d+hatDefs.length)%hatDefs.length;wearHat()},cycleCol=d=>{cos.col=(cos.col+d+COLS.length)%COLS.length;wearHat()};
 wearHat();
+// ---------- Secret Stick: a wooden stick in the RIGHT hand. Off by default; each player enables it in the menu and everyone sees it on them. ----------
+let stickOn=false;try{stickOn=localStorage.getItem('monkeStick')==='1'}catch(e){}
+function makeStick(){
+  const g=new THREE.Group(),wood=MT(0x8b5a2b,0.85),dark=MT(0x4a2e14,0.9),grip=MT(0x222222,0.95);
+  // built along +Y (the wrist bone's forward axis), in gorilla-local units
+  const shaft=cyl(.017,.021,1.0,wood,12);shaft.position.y=0.3;
+  const tip=ball(.017,wood);tip.position.y=0.8;
+  const wrap=cyl(.025,.025,.12,grip,12);wrap.position.y=0.07;
+  const knob=ball(.03,dark);knob.position.y=-0.22;
+  const band=cyl(.023,.023,.02,dark,12);band.position.y=0.6;
+  g.add(shaft,tip,wrap,knob,band);
+  g.traverse(o=>{o.frustumCulled=false});
+  return g;
+}
+function setStick(g,on){
+  if(g.stickObj){if(g.stickObj.parent)g.stickObj.parent.remove(g.stickObj);g.stickObj=null}
+  if(!on)return;
+  const o=makeStick(),ws=g.rig.ws[1];
+  o.scale.set(1/ws.x,1/ws.y,1/ws.z); // cancel the wrist bone's world scale so the stick keeps a fixed size in the gorilla's units
+  o.position.set(0,0.06/ws.y,0);
+  g.rig.wrist[1].add(o);g.stickObj=o;
+}
+function toggleStick(){stickOn=!stickOn;try{localStorage.setItem('monkeStick',stickOn?'1':'0')}catch(e){}setStick(P.g,stickOn);netSend({t:'c',hat:cos.hat,col:cos.col,fur:cos.fur,stick:stickOn})}
+setStick(P.g,stickOn);
 applyHeadphoneOffset();
 
 // ---------- multiplayer: ONE public lobby, WebRTC peer-to-peer via PeerJS ----------
@@ -508,13 +532,14 @@ P.tag=mkTag(myName());P.g.group.add(P.tag);
 $('mpname').addEventListener('input',()=>{P.g.group.remove(P.tag);P.tag=mkTag(myName());P.g.group.add(P.tag);
   try{localStorage.setItem('monkeName',myName())}catch(e){}netSend({t:'n',name:myName()})});
 const okI=(v,n)=>Number.isInteger(v)&&v>=0&&v<n;
-function addRemote(id,name,hat,col,fur){
+function addRemote(id,name,hat,col,fur,stick){
   name=typeof name==='string'?name.slice(0,14):undefined;
   let r=remotes.get(id);
   if(!r){const g=makeGorilla();r={g,tag:null,pos:V(),ry:0,h:[V(),V()],tp:null,name:'',last:performance.now(),ht:[false,false],htT:[0,0],headBaseQ:g.rig.head.quaternion.clone()};remotes.set(id,r);name=name||'Monke';updCount();sfxJoin()}
   if(name&&name!==r.name){if(r.tag)r.g.group.remove(r.tag);r.tag=mkTag(name);r.g.group.add(r.tag);r.name=name}
   if(hat!==undefined)setHat(r.g,okI(hat,hatDefs.length)?hat:0,okI(col,COLS.length)?col:0);
   if(typeof fur==='number'&&isFinite(fur))setFur(r.g,fur<0?-1:(fur&0xffffff));
+  if(typeof stick==='boolean'&&stick!==!!r.g.stickObj)setStick(r.g,stick);
   return r;
 }
 function dropRemote(id){const r=remotes.get(id);if(!r)return;scene.remove(r.g.group);remotes.delete(id);updCount();sfxLeave()}
@@ -526,9 +551,9 @@ function onData(id0,d){
   if(d.t==='hi'&&typeof d.id==='string'&&d.id&&d.id!==id0)alias.set(id0,d.id);
   const id=key_(id0);const rr=remotes.get(id);if(rr)rr.last=performance.now();
   const fromHost=isHostKey(id0); // game state / lobby control only counts when it comes from the lobby host
-  if(d.t==='hi'){const hr=addRemote(id,d.name,d.hat,d.col,d.fur);hr.seq=Number.isFinite(d.seq)?d.seq:9999}
+  if(d.t==='hi'){const hr=addRemote(id,d.name,d.hat,d.col,d.fur,d.stick);hr.seq=Number.isFinite(d.seq)?d.seq:9999}
   else if(d.t==='q'){const r=remotes.get(id);if(r&&Number.isFinite(d.seq))r.seq=d.seq}
-  else if(d.t==='c')addRemote(id,undefined,d.hat,d.col,d.fur);
+  else if(d.t==='c')addRemote(id,undefined,d.hat,d.col,d.fur,d.stick);
   else if(d.t==='n')addRemote(id,d.name);
   else if(d.t==='host'){ // only believed when the current host connection is gone (see claimHost)
     if(net&&![...net.conns].some(([k,c])=>c.open&&isHostKey(k))){net.hostKnown=true;alias.set(HOST_ID,id)}}
@@ -551,7 +576,7 @@ function wire(c){
   c.on('open',()=>{
     if(net&&net.host&&[...net.conns.values()].filter(x=>x.open&&x!==c).length+1>=MAX_PLAYERS){   // lobby full: turn the newcomer away
       c.rejected=true;if(net.conns.get(id)===c)net.conns.delete(id);c.send({t:'full'});setTimeout(()=>{try{c.close()}catch(e){}},500);return}
-    c.send({t:'hi',id:net.peer.id,seq:net.seq,name:myName(),hat:cos.hat,col:cos.col,fur:cos.fur});
+    c.send({t:'hi',id:net.peer.id,seq:net.seq,name:myName(),hat:cos.hat,col:cos.col,fur:cos.fur,stick:stickOn});
     if(net&&net.host)c.send({t:'peers',seq:net.n++,ids:[...net.conns.keys()].filter(k=>k!==id&&net.conns.get(k).open)});
     if(net&&net.host)c.send(gameState())});
   c.on('data',d=>{if(!c.rejected)onData(id,d)});
@@ -1129,15 +1154,14 @@ menuG.add(menuMesh);menuG.visible=false;scene.add(menuG);
 // ---------- MOCAP: record the gorilla rig, export a GLB with Playermodel.glb baked in ----------
 // Menu > Mocap > Record / Stop / Export GLB / Clear take, plus Include map / Include other players.
 // Records every bone of the player model (local pos/rot/scale) plus the gorilla's root transform. Export builds a fresh copy of
-// Playermodel.glb (skinned, textured) per recorded player and bakes the take on as animation. Your Secret Stick (client-side only,
-// never sent to other players) is added to your right hand in the file when you have it equipped.
+// Playermodel.glb (skinned, textured) per recorded player and bakes the take on as animation. Any gorilla holding a Secret Stick gets it on the right hand in the file.
 const MOCAP_FPS=60,MOCAP_MAX=36000,MOCAP_BINARY=true; // MOCAP_BINARY=false -> plain .gltf instead of .glb
 const mocap={rec:false,busy:false,bones:[],times:[],data:[],rem:new Map(),t0:0,next:0,msg:'',map:false,players:false};
 try{mocap.map=localStorage.getItem('monkeMocapMap')==='1';mocap.players=localStorage.getItem('monkeMocapPlayers')==='1'}catch(e){}
 const mocapSay=m=>{mocap.msg=m};
 const mocapSecs=()=>mocap.times.length?mocap.times[mocap.times.length-1].toFixed(1):'0.0';
 // walk a gorilla's model but skip hats and the stick so bone/mesh order always matches a clean copy of Playermodel.glb
-function mocapWalk(o,fn,g=P.g){fn(o);for(const c of o.children){if(c===g.hatObj)continue;mocapWalk(c,fn,g)}}
+function mocapWalk(o,fn,g=P.g){fn(o);for(const c of o.children){if(c===g.hatObj||c===g.stickObj)continue;mocapWalk(c,fn,g)}}
 function mocapBonesOf(g){const b=[];mocapWalk(g.model,o=>{if(o.isBone)b.push(o)},g);return b}
 function mocapStart(){
   const bones=mocapBonesOf(P.g);
@@ -1186,6 +1210,10 @@ function mocapActor(exScene,tracks,g,label,times,data,total,pad,stick){
     const last=T[T.length-1];
     if(total-last>0.002){const z=hide(D[D.length-1]);T.push(last+0.001,total);D.push(z,z)}
   }
+  if(stick&&g.stickObj){ // your Secret Stick rides on the right wrist bone in the exported file
+    const wr=bones.find(b=>['wristr4','n34'].includes(String(b.name||'').toLowerCase().replace(/[^a-z0-9]/g,'')));
+    if(wr){const so=g.stickObj.clone(true);so.name='Secret_Stick';wr.add(so)}
+  }
   const n=T.length;
   [root,...bones].forEach((o,j)=>{
     const pv=new Float32Array(n*3),qv=new Float32Array(n*4),sv=new Float32Array(n*3);
@@ -1206,11 +1234,11 @@ function mocapExport(){
     const useMap=mocap.map&&lvl<1;
     const exScene=new THREE.Scene(),tracks=[];
     const t0=mocap.times[0],times=mocap.times.map(t=>t-t0),total=times[n-1];
-    mocapActor(exScene,tracks,P.g,'Monke',times,mocap.data,total,false);
+    mocapActor(exScene,tracks,P.g,'Monke',times,mocap.data,total,false,true);
     let others=0;
     if(mocap.players)mocap.rem.forEach(e=>{
       if(e.times.length<2)return;
-      mocapActor(exScene,tracks,e.g,'Player_'+String(e.name||'Monke').replace(/[^\w-]/g,'_'),e.times.map(t=>Math.max(0,t-t0)),e.data,total,true);others++;
+      mocapActor(exScene,tracks,e.g,'Player_'+String(e.name||'Monke').replace(/[^\w-]/g,'_'),e.times.map(t=>Math.max(0,t-t0)),e.data,total,true,true);others++;
     });
     if(useMap){const m=mapGltf.scene.clone(true);m.name='Map';exScene.add(m)} // same world transform as the live map, so the take lines up with it
     const clip=new THREE.AnimationClip('Mocap',-1,tracks);
@@ -1224,8 +1252,8 @@ function mocapExport(){
   }catch(e){console.error(e);if(lvl<1){run(lvl+1);return}mocap.busy=false;mocapSay('Export failed: '+String(e.message).slice(0,40))}},30);
   run(0);
 }
-const menuIds=['mic','hear','sfx','turn','mode','cam','cos','names','mocap','close'];
-const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:60+i*49,w:432,h:43}));
+const menuIds=['mic','hear','sfx','turn','mode','cam','cos','names','mocap','stick','close'];
+const MAIN_BTNS=menuIds.map((id,i)=>({id,x:40,y:58+i*45,w:432,h:40}));
 // cosmetics page: hat thumbnails (5 per row), hat colors, fur colors, back button
 const COS_BTNS=[];
 hatDefs.forEach((h,i)=>COS_BTNS.push({id:'hat:'+i,x:30+(i%6)*80,y:84+Math.floor(i/6)*80,w:72,h:72}));
@@ -1261,7 +1289,7 @@ function hatThumb(hi,ci){
   return c;
 }
 function drawMenu(){
-  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost()+'|'+mocap.rec+'|'+(mocap.times.length>>4)+'|'+mocap.busy+'|'+mocap.msg+'|'+mocap.map+'|'+mocap.players+'|'+myName()+'|'+roomCode+'|'+headphoneOffset.x+'|'+headphoneOffset.y;
+  const key=menuPage+'|'+menuHover+'|'+cos.hat+'|'+cos.col+'|'+cos.fur+'|'+micOn+'|'+micOK+'|'+hearOn+'|'+sfxOn+'|'+turnMode+'|'+game.mode+'|'+isHost()+'|'+mocap.rec+'|'+(mocap.times.length>>4)+'|'+mocap.busy+'|'+mocap.msg+'|'+mocap.map+'|'+mocap.players+'|'+myName()+'|'+roomCode+'|'+headphoneOffset.x+'|'+headphoneOffset.y+'|'+stickOn;
   if(key===menuDrawKey)return;menuDrawKey=key;
   const x=menuCx;x.clearRect(0,0,MW,MH);
   x.fillStyle='rgba(0,0,0,.88)';rr(0,0,MW,MH,28);x.fill();
@@ -1337,6 +1365,7 @@ function drawMenu(){
     else if(b.id==='cam'){col='#8b5cf6';txt='Bring camera to me'}
     else if(b.id==='cos'){col='#db2777';txt='Cosmetics  >'}
     else if(b.id==='names'){col='#7c3aed';txt='Names and codes  >'}
+    else if(b.id==='stick'){col=stickOn?'#3ecf6a':'#d9534f';fg=stickOn?'#000':'#fff';txt='Secret Stick: '+(stickOn?'ON':'OFF')}
     else if(b.id==='mocap'){col=mocap.rec?'#d9534f':'#0ea5a4';txt=mocap.rec?'Mocap: REC '+mocapSecs()+'s  >':'Mocap  >'}
     x.fillStyle=col;rr(b.x,b.y,b.w,b.h,12);x.fill();
     if(i===menuHover){x.strokeStyle='#fff';x.lineWidth=4;rr(b.x,b.y,b.w,b.h,12);x.stroke()}
@@ -1365,6 +1394,7 @@ function menuClick(id){
   else if(id==='turn'){turnMode=(turnMode+1)%3;vrSnap=false;try{localStorage.setItem('monkeTurn',turnMode)}catch(e){}}
   else if(id==='mode'){if(isHost())hostSetMode(game.mode==='tag'?'free':'tag')}
   else if(id==='cam'){camBring();setMenu(false)}
+  else if(id==='stick')toggleStick();
   else if(id==='cos'){menuPage='cos';menuHover=-1;menuDrawKey=''}
   else if(id==='mocap'){menuPage='mocap';menuHover=-1;menuDrawKey=''}
   else if(id==='names'){menuPage='names';menuHover=-1;menuDrawKey=''}
@@ -1718,6 +1748,7 @@ btn(main,()=>setHear(!hearOn),()=>onoff(hearOn,'Hear others'));
 btn(main,()=>{setSfx(!sfxOn);if(sfxOn)sfxClick()},()=>onoff(sfxOn,'Sounds'));
 btn(main,()=>{if(isHost())hostSetMode(game.mode==='tag'?'free':'tag')},()=>['Game mode: '+(game.mode==='tag'?'TAG':'CASUAL')+(isHost()?'':' (host only)'),isHost()?'#b45309':'#444']);
 btn(main,()=>{camBring();resume()},()=>['Bring camera to me','#8b5cf6']);
+btn(main,()=>toggleStick(),()=>onoff(stickOn,'Secret Stick'));
 btn(main,()=>show('cos'),()=>['Cosmetics  >','#db2777']);
 btn(main,()=>show('names'),()=>['Names and codes  >','#7c3aed']);
 btn(main,()=>show('mocap'),()=>[mocap.rec?'Mocap: REC '+mocapSecs()+'s  >':'Mocap  >',mocap.rec?'#d9534f':'#0ea5a4']);
