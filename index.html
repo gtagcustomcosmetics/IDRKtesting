@@ -1517,10 +1517,11 @@ renderer.xr.addEventListener('sessionend',()=>{if(kb.open){kb.open=false;kb.g.vi
 // Buttons are pressed with the hand LASER + TRIGGER, same as the menu. While holding: right stick up/down = FOV. Photos only come from the PHOTO button on the camera (point the free hand's laser at it and press trigger).
 let camTick=()=>{},camBring=()=>{};
 {
-const HX=.345,MODES=['THIRD','FIRST','SELFIE'],CS=VS; // HX = handle distance from the centre (D-loops of the camera model)
-const cst={mode:0,fov:70,rec:false};
+const HX=.345,CS=VS; // HX = handle distance from the centre (D-loops of the camera model)
+const cst={mode:0,orientation:0,firstPerson:false,fov:70,rec:false};
 const A=V(),B=V(),X=V(),Y=V(),Z=V(),U1=V(),U2=V(),TS=V(),Q=new THREE.Quaternion(),MM=new THREE.Matrix4();
 const r2=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});r2.setSize(960,540,false);
+function setCameraOrientation(){const w=cst.orientation===0?960:540,h=cst.orientation===0?540:960;r2.setSize(w,h,false);tex.image=r2.domElement;tex.needsUpdate=true;c2.aspect=w/h;c2.updateProjectionMatrix()}
 const cv2=r2.domElement;
 const tex=new THREE.CanvasTexture(cv2);tex.minFilter=THREE.LinearFilter;tex.generateMipmaps=false;tex.colorSpace=THREE.SRGBColorSpace;
 tex.flipY=false; // the model's screen UVs use the glTF convention (top of the image = v 0)
@@ -1529,7 +1530,7 @@ const cm=new THREE.Group();cm.scale.setScalar(CS);cm.visible=false;scene.add(cm)
 // ---- camera model: embedded GLB (nodes: Body, Handle_L/R, Screen, InfoBar, Button_PHOTO/REC/MODE/FLIP/FOV-/FOV+) ----
 const LENS_Y=.002,LENS_Z=-.12,SELFIE_Z=.04; // where the in-game camera sits relative to the model (lens is on the back, screen on the front)
 const BTN_TRAVEL=.0055;                     // how far a button sinks when pressed (model units)
-const BTN_DEFS=[['photo','PHOTO','#ffffff'],['rec','REC','#ff4646'],['mode','MODE','#78c8ff'],['flip','FLIP','#ffd25a'],['fovm','FOV-','#96ffaa'],['fovp','FOV+','#96ffaa']];
+const BTN_DEFS=[['photo','PHOTO','#ffffff'],['rec','REC','#ff4646'],['mode','MODE','#78c8ff'],['first','1ST','#ffd25a'],['flip','FLIP','#ffd25a'],['fovm','FOV-','#96ffaa'],['fovp','FOV+','#96ffaa']];
 let ready=false,flashM=null,info=null,hitObjs=[];
 const buttons=[];
 try{
@@ -1570,9 +1571,9 @@ try{
 }catch(e){console.error('Camera model failed to load:',e)}
 let infoKey='';
 function ui(){
-  buttons.forEach(b=>{const u=b.userData,on=u.t>0||(u.id==='rec'&&cst.rec)||(u.id==='flip'&&cst.mode===2),txt=u.id==='rec'&&cst.rec?'STOP':u.txt,k=txt+on;
+  buttons.forEach(b=>{const u=b.userData,on=u.t>0||(u.id==='rec'&&cst.rec)||(u.id==='flip'&&cst.mode===2)||(u.id==='first'&&cst.firstPerson),txt=u.id==='rec'&&cst.rec?'STOP':u.txt,k=txt+on;
     if(k!==u.k){u.k=k;b.draw(txt,on?(u.id==='rec'?'#d11a2a':'#2a9df4'):'#202632','#fff',u.ac)}});
-  const t=MODES[cst.mode]+'   FOV '+Math.round(cst.fov)+'°'+(cst.rec?'   ● REC':'');
+  const t=(cst.orientation===0?'HORIZONTAL':'VERTICAL')+'  '+(cst.firstPerson?'1ST':'CAM')+'  FOV '+Math.round(cst.fov)+'°'+(cst.rec?'   ● REC':'');
   if(t!==infoKey){infoKey=t;info.draw(t,'#10131a','#9ee7ff')}
 }
 
@@ -1631,7 +1632,7 @@ const c2=new THREE.PerspectiveCamera(70,16/9,XR_DEPTH_NEAR,500),qFlip=new THREE.
 const _fpO=V(),_fpE=new THREE.Euler();
 function renderCam(){
   let hideHead=false;
-  if(cst.mode===1){
+  if(cst.firstPerson){
     // FIRST mode: film from the avatar's head bone, not the headset (the headset sits out in the third-person view).
     // Position = head bone + the same EYE_OFF the flat-screen first-person view uses. Rotation = avatar yaw (left/right) + head pitch (up/down), same values that drive the body and head bone.
     P.g.rig.head.updateWorldMatrix(true,false);P.g.rig.head.getWorldPosition(c2.position);
@@ -1640,7 +1641,7 @@ function renderCam(){
     hideHead=true; // the camera sits inside the head, so hide the head + hat while this view is drawn
   }
   else{c2.position.copy(cm.localToWorld(A.set(0,LENS_Y,cst.mode===2?SELFIE_Z:LENS_Z)));c2.quaternion.copy(cm.quaternion);if(cst.mode===2)c2.quaternion.multiply(qFlip)}
-  c2.fov=cst.fov;c2.updateProjectionMatrix();
+  c2.fov=cst.fov;c2.aspect=cst.orientation===0?16/9:9/16;c2.updateProjectionMatrix();
   const hv=hudPlane.visible,mv=menuG.visible,lv=lasers.map(l=>l.visible);
   cm.visible=false;menuG.visible=false;hudPlane.visible=false;lasers.forEach(l=>l.visible=false);
   if(hideHead)setSelfHead(true);
@@ -1767,7 +1768,8 @@ function toggleRec(){
 }
 function press(id){
   if(id==='photo')photo();else if(id==='rec')toggleRec();
-  else if(id==='mode')cst.mode=(cst.mode+1)%3;
+  else if(id==='mode'){cst.orientation=1-cst.orientation;setCameraOrientation()}
+  else if(id==='first')cst.firstPerson=!cst.firstPerson;
   else if(id==='flip')cst.mode=cst.mode===2?0:2;
 }
 
