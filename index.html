@@ -11,7 +11,7 @@ canvas{display:block}
 #help{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0008;color:#fff;text-align:center;font-size:16px;line-height:1.7;cursor:pointer}
 #help #msg{max-width:520px;padding:20px;background:#000a;border-radius:14px;box-sizing:border-box;max-height:calc(100vh - 130px);overflow-y:auto;overscroll-behavior:contain;position:relative;z-index:1}
 @media (max-height:700px){#help #msg{font-size:13px;line-height:1.5;padding:14px}}
-#help #cos,#help #mp{max-height:calc(100vh - 130px);overflow-y:auto;box-sizing:border-box;z-index:2}
+#help #cos,#help #mp{max-height:calc(100vh - 32px);overflow-y:auto;box-sizing:border-box;z-index:2}
 #VRButton{position:fixed!important;bottom:16px!important;left:50%!important;right:auto!important;transform:translateX(-50%);width:auto!important;min-width:140px;padding:12px 20px!important;z-index:100000!important;opacity:1!important;font-size:15px!important;background:#ffd54a!important;color:#000!important;border:0!important;border-radius:10px!important;cursor:pointer}
 #help b{color:#ffd54a;font-weight:400}
 #cos{position:fixed;right:16px;top:16px;max-width:230px;padding:14px;border-radius:12px;background:#000b;font-size:14px;text-align:left;cursor:default;line-height:1.5}
@@ -429,8 +429,9 @@ const hatDefs=[
    g.add(t,at(cyl(.14,.14,.045,MT(0xffffff)),0,.01,0));return g}],
  ['Cat Ears',m=>{const g=new THREE.Group();for(const sx of[-1,1]){const e=at(new THREE.Mesh(new THREE.ConeGeometry(.05,.11,4),m),sx*.09,.04,0);e.rotation.z=-sx*.25;
    const i=at(new THREE.Mesh(new THREE.ConeGeometry(.028,.07,4),MT(0xffb3c6)),sx*.09,.035,.012);i.rotation.z=-sx*.25;g.add(e,i)}return g}], ['Headphones',m=>{const g=new THREE.Group();
-    // Headphone height is controlled by the attachment offset in setHat().
-    // Keep the cups slightly outward so they sit over the ears rather than inside the head.
+    // Lower the headset so the band rests on the top of the head instead of floating.
+    // Move the cups slightly outward so they sit over the ears rather than inside the head.
+    g.position.y=-.15;
     const band=new THREE.Mesh(new THREE.TorusGeometry(.17,.018,8,32,Math.PI),MT(0x222831));
     band.position.y=.025;g.add(band);
     for(const sx of[-1,1]){
@@ -441,10 +442,26 @@ const hatDefs=[
     }
     return g}]
 ];
+// Headphone placement is adjustable per player on this device. Other hats keep their original attachment.
+const HEADPHONE_DEFAULT={x:0,y:0.285,z:0.03};
+let headphoneOffset={...HEADPHONE_DEFAULT};
+try{const saved=JSON.parse(localStorage.getItem('monkeHeadphoneOffset')||'null');if(saved&&['x','y','z'].every(k=>Number.isFinite(saved[k])))headphoneOffset=saved}catch(e){}
 function setHat(g,hi,ci){
   if(g.hatObj){g.rig.head.remove(g.hatObj);g.hatObj=null;g.spin=null}
-  if(hatDefs[hi]&&hatDefs[hi][1]){g.hatObj=hatDefs[hi][1](MT(COLS[ci]));g.spin=g.hatObj.userData.spin||null;at(g.hatObj,0,hi===10?0.12:0.285,0.03);g.rig.head.add(g.hatObj)}
+  if(hatDefs[hi]&&hatDefs[hi][1]){
+    g.hatObj=hatDefs[hi][1](MT(COLS[ci]));g.spin=g.hatObj.userData.spin||null;
+    const pos=hi===10&&g===P.g?headphoneOffset:HEADPHONE_DEFAULT;
+    at(g.hatObj,pos.x,pos.y,pos.z);g.rig.head.add(g.hatObj)
+  }
 }
+function applyHeadphoneOffset(){
+  try{localStorage.setItem('monkeHeadphoneOffset',JSON.stringify(headphoneOffset))}catch(e){}
+  if(P.g&&cos.hat===10&&P.g.hatObj)P.g.hatObj.position.set(headphoneOffset.x,headphoneOffset.y,headphoneOffset.z);
+  if(typeof wearHat==='function'){
+    [...$('hpEditor').querySelectorAll('[data-axis]')].forEach(el=>{const a=el.dataset.axis;el.value=headphoneOffset[a];const out=$('hpv_'+a);if(out)out.textContent=headphoneOffset[a].toFixed(3)})
+  }
+}
+
 // FUR_ORIG (the default swatch) = the model's own lime green; any other swatch (white included) replaces it
 const FUR_ORIG=0x30e636;
 function furCol(g,i,v){if(v===FUR_ORIG)g.furMats[i].color.copy(g.origCols[i]);else g.furMats[i].color.setHex(v)}
@@ -463,6 +480,17 @@ FURS.forEach(v=>{const d=document.createElement('span');d.className='sw';d.datas
   d.style.background=v<0?'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)':'#'+v.toString(16).padStart(6,'0');d.onclick=()=>{cos.fur=v;wearHat()};$('fl').appendChild(d)});
 const fp=document.createElement('input');fp.type='color';fp.value='#ff8800';fp.title='Custom fur color';fp.style.cssText='width:30px;height:26px;border:0;padding:0;vertical-align:middle;background:none';
 fp.oninput=()=>{cos.fur=parseInt(fp.value.slice(1),16);wearHat()};$('fl').appendChild(fp);
+// In-game headphone fitting panel: sliders update the live headset and can be copied back into ChatGPT.
+const hpEditor=document.createElement('section');hpEditor.id='hpEditor';
+hpEditor.style.cssText='margin-top:12px;padding:10px;border:1px solid #ffd54a66;border-radius:10px;background:#111b;color:#fff;max-width:100%';
+hpEditor.innerHTML='<b>Headphone position</b><small style="display:block;color:#bbb">Select Headphones, then adjust while watching your character in the mirror.</small>'+
+  ['x','y','z'].map(a=>`<label style="display:block;margin-top:8px;font-size:12px">${a.toUpperCase()} <output id="hpv_${a}"></output><input data-axis="${a}" type="range" min="-0.35" max="0.65" step="0.005" style="display:block;width:100%"></label>`).join('')+
+  '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px"><button type="button" data-copy="values">Copy position</button><button type="button" data-copy="prompt">Copy adjustment prompt</button><button type="button" data-reset="1">Reset</button></div><small id="hpStatus" style="display:block;color:#ffd54a;margin-top:6px">Changes save automatically on this device.</small>';
+$('cos').appendChild(hpEditor);
+hpEditor.querySelectorAll('[data-axis]').forEach(el=>{const a=el.dataset.axis;el.addEventListener('input',()=>{headphoneOffset[a]=Number(el.value);applyHeadphoneOffset()})});
+hpEditor.querySelector('[data-reset]').onclick=()=>{headphoneOffset={...HEADPHONE_DEFAULT};applyHeadphoneOffset()};
+hpEditor.querySelector('[data-copy="values"]').onclick=()=>{const t=`Headphone position offsets (head bone): X=${headphoneOffset.x.toFixed(3)}, Y=${headphoneOffset.y.toFixed(3)}, Z=${headphoneOffset.z.toFixed(3)}. Please apply these exact values to the headphones in my HTML.`;navigator.clipboard.writeText(t).then(()=>{$('hpStatus').textContent='Position settings copied. Paste them into ChatGPT.'}).catch(()=>{$('hpStatus').textContent=t})};
+hpEditor.querySelector('[data-copy="prompt"]').onclick=()=>{const t=`Please update my uploaded game HTML so the Headphones cosmetic uses these exact head-bone offsets: X=${headphoneOffset.x.toFixed(3)}, Y=${headphoneOffset.y.toFixed(3)}, Z=${headphoneOffset.z.toFixed(3)}. Preserve the rest of the game. These values are the position I fitted in-game.`;navigator.clipboard.writeText(t).then(()=>{$('hpStatus').textContent='Adjustment prompt copied. Paste it into ChatGPT with the HTML.'}).catch(()=>{$('hpStatus').textContent=t})};
 function wearHat(){
   setHat(P.g,cos.hat,cos.col);setFur(P.g,cos.fur);netSend({t:'c',hat:cos.hat,col:cos.col,fur:cos.fur});
   [...$('hl').children].forEach((b,i)=>b.classList.toggle('on',i===cos.hat));
@@ -473,6 +501,7 @@ function wearHat(){
 const cycleFur=()=>{cos.fur=FURS[(FURS.indexOf(cos.fur)+1)%FURS.length];wearHat()};
 const cycleHat=d=>{cos.hat=(cos.hat+d+hatDefs.length)%hatDefs.length;wearHat()},cycleCol=d=>{cos.col=(cos.col+d+COLS.length)%COLS.length;wearHat()};
 wearHat();
+applyHeadphoneOffset();
 
 // ---------- multiplayer: ONE public lobby, WebRTC peer-to-peer via PeerJS ----------
 const MAX_PLAYERS=4,PEEROPTS={},BASE_ID='lokeworks-monketag-separate-lobby-7k3q'; // UNIQUE per repo: every copy of the game that uses the same BASE_ID shares the same servers
