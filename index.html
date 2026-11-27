@@ -428,16 +428,19 @@ const hatDefs=[
    t.add(at(new THREE.Mesh(new THREE.ConeGeometry(.13,.3,20),m),0,.15,0),at(ball(.035,MT(0xffffff)),0,.3,0));
    g.add(t,at(cyl(.14,.14,.045,MT(0xffffff)),0,.01,0));return g}],
  ['Cat Ears',m=>{const g=new THREE.Group();for(const sx of[-1,1]){const e=at(new THREE.Mesh(new THREE.ConeGeometry(.05,.11,4),m),sx*.09,.04,0);e.rotation.z=-sx*.25;
-   const i=at(new THREE.Mesh(new THREE.ConeGeometry(.028,.07,4),MT(0xffb3c6)),sx*.09,.035,.012);i.rotation.z=-sx*.25;g.add(e,i)}return g}],
- ['Headphones',m=>{const g=new THREE.Group();
-   const band=new THREE.Mesh(new THREE.TorusGeometry(.16,.018,8,32,Math.PI),MT(0x222831));
-   band.position.y=.035;g.add(band);
-   for(const sx of[-1,1]){
-     const cup=at(cyl(.067,.067,.052,MT(0x252a34)),sx*.15,-.015,.012);cup.rotation.z=Math.PI/2;g.add(cup);
-     const pad=at(cyl(.048,.048,.056,MT(0x596273)),sx*.15,-.015,.012);pad.rotation.z=Math.PI/2;g.add(pad);
-     g.add(at(ball(.018,m),sx*.15,-.015,.045));
-   }
-   return g}]
+   const i=at(new THREE.Mesh(new THREE.ConeGeometry(.028,.07,4),MT(0xffb3c6)),sx*.09,.035,.012);i.rotation.z=-sx*.25;g.add(e,i)}return g}], ['Headphones',m=>{const g=new THREE.Group();
+    // Lower the headset so the band rests on the top of the head instead of floating.
+    // Move the cups slightly outward so they sit over the ears rather than inside the head.
+    g.position.y=-.15;
+    const band=new THREE.Mesh(new THREE.TorusGeometry(.17,.018,8,32,Math.PI),MT(0x222831));
+    band.position.y=.025;g.add(band);
+    for(const sx of[-1,1]){
+      const x=sx*.19;
+      const cup=at(cyl(.072,.072,.07,MT(0x252a34)),x,-.005,.012);cup.rotation.z=Math.PI/2;g.add(cup);
+      const pad=at(cyl(.055,.055,.074,MT(0x596273)),x,-.005,.012);pad.rotation.z=Math.PI/2;g.add(pad);
+      g.add(at(ball(.018,m),x,-.005,.052));
+    }
+    return g}]
 ];
 function setHat(g,hi,ci){
   if(g.hatObj){g.rig.head.remove(g.hatObj);g.hatObj=null;g.spin=null}
