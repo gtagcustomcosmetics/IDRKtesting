@@ -1530,13 +1530,16 @@ const r2=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});r2
 function setCameraOrientation(){
   // Keep the output canvas at 16:9 in both modes. Portrait mode is rendered
   // into a centered 9:16 viewport, leaving real black pillarbox bars.
+  // Portrait is a real 540x960 canvas, so photos/clips come out actually vertical.
+  // The in-world camera screen is 16:9, so it shows a separate preview canvas (pillarboxed in portrait).
   const w=cst.orientation===0?16/9:9/16;
   c2.aspect=w;c2.updateProjectionMatrix();
-  r2.setSize(960,540,false);
-  tex.image=r2.domElement;tex.needsUpdate=true;
+  if(cst.orientation===0)r2.setSize(960,540,false);else r2.setSize(540,960,false);
+  tex.needsUpdate=true;
 }
 const cv2=r2.domElement;
-const tex=new THREE.CanvasTexture(cv2);tex.minFilter=THREE.LinearFilter;tex.generateMipmaps=false;tex.colorSpace=THREE.SRGBColorSpace;
+const prev=document.createElement('canvas');prev.width=960;prev.height=540;const pc=prev.getContext('2d');
+const tex=new THREE.CanvasTexture(prev);tex.minFilter=THREE.LinearFilter;tex.generateMipmaps=false;tex.colorSpace=THREE.SRGBColorSpace;
 tex.flipY=false; // the model's screen UVs use the glTF convention (top of the image = v 0)
 const cm=new THREE.Group();cm.scale.setScalar(CS);cm.visible=false;scene.add(cm);
 
@@ -1668,24 +1671,15 @@ function renderCam(){
   const hv=hudPlane.visible,mv=menuG.visible,lv=lasers.map(l=>l.visible);
   cm.visible=false;menuG.visible=false;hudPlane.visible=false;lasers.forEach(l=>l.visible=false);
   if(hideHead)setSelfHead(true);
-  // Always render into the full 960x540 canvas. In vertical mode, use a
-  // centered 9:16 viewport and clear the unused left/right area to black.
+  // Render the whole capture canvas (960x540 landscape, 540x960 portrait).
   r2.setRenderTarget(null);
-  r2.setViewport(0,0,960,540);
-  r2.setScissor(0,0,960,540);
-  r2.setScissorTest(true);
-  r2.setClearColor(0x000000,1);
-  r2.clear(true,true,true);
-  if(cst.orientation===0){
-    r2.setViewport(0,0,960,540);
-    r2.setScissor(0,0,960,540);
-  }else{
-    const vw=540*9/16,x=(960-vw)/2;
-    r2.setViewport(x,0,vw,540);
-    r2.setScissor(x,0,vw,540);
-  }
-  r2.render(scene,c2);
   r2.setScissorTest(false);
+  r2.setClearColor(0x000000,1);
+  r2.render(scene,c2);
+  // Preview for the 16:9 screen on the camera model: portrait gets black bars here only, never in the capture.
+  pc.fillStyle='#000';pc.fillRect(0,0,960,540);
+  if(cst.orientation===0)pc.drawImage(cv2,0,0,960,540);
+  else{const pw=540*9/16;pc.drawImage(cv2,(960-pw)/2,0,pw,540)}
   if(hideHead)setSelfHead(false);
   cm.visible=true;menuG.visible=mv;hudPlane.visible=hv;lasers.forEach((l,i)=>l.visible=lv[i]);
   tex.needsUpdate=true;
@@ -1808,7 +1802,7 @@ function toggleRec(){
 }
 function press(id){
   if(id==='photo')photo();else if(id==='rec')toggleRec();
-  else if(id==='mode'){cst.orientation=1-cst.orientation;setCameraOrientation()}
+  else if(id==='mode'){if(cst.rec)return;cst.orientation=1-cst.orientation;setCameraOrientation()}
   else if(id==='first')cst.firstPerson=!cst.firstPerson;
   else if(id==='flip')cst.mode=cst.mode===2?0:2;
 }
