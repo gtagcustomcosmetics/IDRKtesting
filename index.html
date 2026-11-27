@@ -1553,6 +1553,14 @@ try{
   flashM=new THREE.Mesh(new THREE.PlaneGeometry(.46,.259),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,fog:false}));
   flashM.position.set(0,.002,.0325);flashM.visible=false;cm.add(flashM);
   // buttons: each model button gets a live label (highlight / STOP text) and can sink when pressed
+  // the embedded GLB only ships 6 buttons (no 1ST), so build any missing one from a copy of MODE and re-space all 7 evenly
+  {
+    const src=need('Button_MODE');
+    for(const d of BTN_DEFS){
+      if(!root.getObjectByName('Button_'+d[1])){const c=src.clone(true);c.name='Button_'+d[1];src.parent.add(c)}
+    }
+    BTN_DEFS.forEach((d,i)=>{need('Button_'+d[1]).position.x=(i-(BTN_DEFS.length-1)/2)*.075});
+  }
   for(const d of BTN_DEFS){
     const b=need('Button_'+d[1]);
     const W=210,H=160,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d'),t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
