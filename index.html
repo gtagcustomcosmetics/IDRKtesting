@@ -431,7 +431,7 @@ const hatDefs=[
    const i=at(new THREE.Mesh(new THREE.ConeGeometry(.028,.07,4),MT(0xffb3c6)),sx*.09,.035,.012);i.rotation.z=-sx*.25;g.add(e,i)}return g}], ['Headphones',m=>{const g=new THREE.Group();
     // Lower the headset so the band rests on the top of the head instead of floating.
     // Move the cups slightly outward so they sit over the ears rather than inside the head.
-    g.position.y=-.15;
+    g.position.y=-.25;
     const band=new THREE.Mesh(new THREE.TorusGeometry(.17,.018,8,32,Math.PI),MT(0x222831));
     band.position.y=.025;g.add(band);
     for(const sx of[-1,1]){
