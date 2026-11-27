@@ -1526,15 +1526,14 @@ const HX=.345,CS=VS; // HX = handle distance from the centre (D-loops of the cam
 const cst={mode:0,orientation:0,firstPerson:false,fov:70,rec:false};
 const A=V(),B=V(),X=V(),Y=V(),Z=V(),U1=V(),U2=V(),TS=V(),Q=new THREE.Quaternion(),MM=new THREE.Matrix4();
 const r2=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});r2.setSize(960,540,false);
-let previewScreen=null,previewBaseScale=null;
+
 function setCameraOrientation(){
-  const w=cst.orientation===0?960:540,h=cst.orientation===0?540:960;
-  r2.setSize(w,h,false);tex.image=r2.domElement;tex.needsUpdate=true;c2.aspect=w/h;c2.updateProjectionMatrix();
-  // Match the physical camera display to the selected preview orientation.
-  if(previewScreen&&previewBaseScale){
-    const factor=Math.sqrt((w/h)/(16/9));
-    previewScreen.scale.set(previewBaseScale.x*factor,previewBaseScale.y/factor,previewBaseScale.z);
-  }
+  // Keep the output canvas at 16:9 in both modes. Portrait mode is rendered
+  // into a centered 9:16 viewport, leaving real black pillarbox bars.
+  const w=cst.orientation===0?16/9:9/16;
+  c2.aspect=w;c2.updateProjectionMatrix();
+  r2.setSize(960,540,false);
+  tex.image=r2.domElement;tex.needsUpdate=true;
 }
 const cv2=r2.domElement;
 const tex=new THREE.CanvasTexture(cv2);tex.minFilter=THREE.LinearFilter;tex.generateMipmaps=false;tex.colorSpace=THREE.SRGBColorSpace;
@@ -1554,7 +1553,6 @@ try{
   const root=gl.scene;cm.add(root);
   const need=n=>{const o=root.getObjectByName(n);if(!o)throw new Error('camera model is missing node '+n);return o};
   const body=need('Body'),screen=need('Screen');info=need('InfoBar');
-  previewScreen=screen;previewBaseScale=screen.scale.clone();
   // live screen: the model's screen quad shows the camera's own render
   screen.material.dispose();screen.material=new THREE.MeshBasicMaterial({map:tex,fog:false});
   // live info bar (mode / FOV / REC text)
@@ -1670,7 +1668,24 @@ function renderCam(){
   const hv=hudPlane.visible,mv=menuG.visible,lv=lasers.map(l=>l.visible);
   cm.visible=false;menuG.visible=false;hudPlane.visible=false;lasers.forEach(l=>l.visible=false);
   if(hideHead)setSelfHead(true);
+  // Always render into the full 960x540 canvas. In vertical mode, use a
+  // centered 9:16 viewport and clear the unused left/right area to black.
+  r2.setRenderTarget(null);
+  r2.setViewport(0,0,960,540);
+  r2.setScissor(0,0,960,540);
+  r2.setScissorTest(true);
+  r2.setClearColor(0x000000,1);
+  r2.clear(true,true,true);
+  if(cst.orientation===0){
+    r2.setViewport(0,0,960,540);
+    r2.setScissor(0,0,960,540);
+  }else{
+    const vw=540*9/16,x=(960-vw)/2;
+    r2.setViewport(x,0,vw,540);
+    r2.setScissor(x,0,vw,540);
+  }
   r2.render(scene,c2);
+  r2.setScissorTest(false);
   if(hideHead)setSelfHead(false);
   cm.visible=true;menuG.visible=mv;hudPlane.visible=hv;lasers.forEach((l,i)=>l.visible=lv[i]);
   tex.needsUpdate=true;
